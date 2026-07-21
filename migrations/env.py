@@ -18,7 +18,18 @@ config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+from sqlalchemy import engine_from_config, pool, event
+from sqlalchemy.orm import configure_mappers
+from geoalchemy2.alembic import GistIndex  # enables spatial index rendering
+
+# Import all models so Alembic can detect them
+from app.database import Base
+from app.models import *  # noqa: F401,F403
+
+target_metadata = Base.metadata
+
+# Ensure all mappers are configured before Alembic inspects metadata
+configure_mappers()
 
 
 def run_migrations_offline():
@@ -43,10 +54,28 @@ def run_migrations_online():
     )
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=_include_object,
+            render_item=_render_item,
         )
         with context.begin_transaction():
             context.run_migrations()
+
+
+def _include_object(object, name, type_, reflected, compare_to):
+    """Skip internal GeoAlchemy2 helper tables."""
+    if type_ == "table" and name == "spatial_ref_sys":
+        return False
+    return True
+
+
+def _render_item(type_, obj, autogen_context):
+    """Custom render for GeoAlchemy2 Geography type."""
+    if type_ == "type" and isinstance(obj, Geography):
+        autogen_context.imports.add("from geoalchemy2 import Geography")
+        return repr(obj)
+    return False
 
 
 if context.is_offline_mode():
