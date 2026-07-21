@@ -1,0 +1,58 @@
+# Secrets
+.env
+.env.local
+.env.production
+*.key
+*.pem
+*.pfx
+id_rsa
+id_ed25519
+
+# Docker
+*.tar
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Flutter
+*.iml
+.flutter-plugins-dependencies
+flutter/.android/
+flutter/.ios/
+flutter/build/
+flutter/.dart_tool/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Obsidian pending (synced separately)
+docs/obsidian-pending/
+
+# Backups
+*.bak
+*.sql
+backups/
+
+# Supabase secrets
+supabase/.temp/
+supabase/.branches/
