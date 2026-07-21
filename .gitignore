@@ -15,8 +15,8 @@ id_ed25519
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 .venv/
 venv/
 *.egg
