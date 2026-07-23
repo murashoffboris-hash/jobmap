@@ -72,7 +72,6 @@ class User(Base):
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     vacancies = relationship("Vacancy", back_populates="owner", cascade="all, delete-orphan")
     responses_sent = relationship("Response", foreign_keys="Response.requester_id", back_populates="requester")
-    responses_received = relationship("Response", foreign_keys="Response.vacancy_id", back_populates="vacancy", overlaps="vacancy_responses")
 
 
 class Profile(Base):
