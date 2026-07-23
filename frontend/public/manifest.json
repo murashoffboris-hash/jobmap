@@ -1,0 +1,30 @@
+{
+  "name": "JobMap",
+  "short_name": "JobMap",
+  "description": "Кроссплатформенный сервис поиска работы и подработки",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "ru",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "lifestyle"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Вакансии рядом",
+      "short_name": "Рядом",
+      "url": "/?near=1",
+      "icons": [{ "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }]
+    }
+  ]
+}
