@@ -26,6 +26,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "src/vite-env.d.ts", "vite.config.ts", "capacitor.config.ts"],
+  "include": ["src", "src/vite-env.d.ts"],
   "exclude": ["node_modules", "dist", "ios", "android"]
 }

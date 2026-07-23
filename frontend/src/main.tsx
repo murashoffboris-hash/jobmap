@@ -4,6 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./styles/global.css";
+import { initTheme } from "@/store/theme";
+
+// Применяем тему до первого рендера, чтобы избежать вспышки неверной темы.
+initTheme();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
