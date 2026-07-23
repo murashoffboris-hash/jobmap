@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import literal
 
 from app.database import async_session_factory
-from app.models import Vacancy, VacancyStatus, GeocodingLog
+from app.models import User, Vacancy, VacancyStatus, GeocodingLog
 from app.schemas import (
     VacancyCreate,
     VacancyUpdate,
@@ -21,6 +21,7 @@ from app.schemas import (
     VacancySearchRequest,
     VacancyGeoResult,
 )
+from app.services.auth import get_current_user, get_current_employer
 from app.services.nominatim import geocode_address
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
 
 
-def get_session():
-    """Yield async database session."""
-    return async_session_factory
+async def get_session():
+    async with async_session_factory() as session:
+        yield session
 
 
 def _vacancy_to_response(v: Vacancy) -> VacancyResponse:
@@ -114,11 +115,14 @@ async def list_vacancies(
 async def create_vacancy(
     data: VacancyCreate,
     session: AsyncSession = Depends(get_session),
-    owner_id: int = Query(...),  # TODO: replace with auth dependency
+    current_user: User = Depends(get_current_employer),
 ):
-    """Create a vacancy with optional geocoding of the address."""
+    """Create a vacancy with optional geocoding of the address.
+
+    Requires employer or admin role.
+    """
     vacancy = Vacancy(
-        owner_id=owner_id,
+        owner_id=current_user.id,
         title=data.title,
         description=data.description,
         category_id=data.category_id,
@@ -171,11 +175,19 @@ async def update_vacancy(
     vacancy_id: int,
     data: VacancyUpdate,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    """Update vacancy fields. If address changes, re-geocode."""
+    """Update vacancy fields. If address changes, re-geocode.
+
+    Only the owner (or admin) may update the vacancy.
+    """
     v = await session.get(Vacancy, vacancy_id)
     if not v:
         raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    # Ownership check
+    if v.owner_id != current_user.id and current_user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Not the owner of this vacancy")
 
     update_data = data.model_dump(exclude_unset=True)
 
@@ -204,10 +216,19 @@ async def update_vacancy(
 async def delete_vacancy(
     vacancy_id: int,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    """Soft-delete vacancy (set status to archived)."""
+    """Soft-delete vacancy (set status to archived).
+
+    Only the owner (or admin) may delete the vacancy.
+    """
     v = await session.get(Vacancy, vacancy_id)
     if not v:
         raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    # Ownership check
+    if v.owner_id != current_user.id and current_user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Not the owner of this vacancy")
+
     v.status = VacancyStatus.ARCHIVED
     await session.commit()

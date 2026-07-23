@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # Auth
     JWT_SECRET: str = "CHANGE_ME"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    BCRYPT_ROUNDS: int = 12
 
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"

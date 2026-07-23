@@ -28,6 +28,7 @@ from app.database import Base
 
 class UserRole(str, Enum):
     USER = "user"
+    EMPLOYER = "employer"
     ADMIN = "admin"
     MODERATOR = "moderator"
 

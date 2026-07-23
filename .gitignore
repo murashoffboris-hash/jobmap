@@ -8,6 +8,11 @@
 id_rsa
 id_ed25519
 
+# Доступ к VPS — НЕ коммитить пароли и приватные ключи
+**/deploy/ssh/*
+!**/deploy/ssh/.gitkeep
+docs/**/Реквизиты_доступа*.md
+
 # Docker
 *.tar
 
