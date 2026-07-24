@@ -28,7 +28,7 @@ export default function MapContainer(props: MapContainerProps): JSX.Element {
   const markersRef = useRef<Marker[]>([]);
 
   const styleUrl =
-    props.styleUrl ?? import.meta.env.VITE_MAP_STYLE_URL ?? "https://demotiles.maplibre.org/style.json";
+    props.styleUrl ?? import.meta.env.VITE_MAP_STYLE_URL ?? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
   const center: LngLatLike = (props.center ?? parseCenter(import.meta.env.VITE_MAP_DEFAULT_CENTER)) as LngLatLike;
   const zoom = props.zoom ?? parseZoom(import.meta.env.VITE_MAP_DEFAULT_ZOOM);
 
