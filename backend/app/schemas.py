@@ -108,6 +108,35 @@ class VacancyGeoResult(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Vacancy list (paginated) ──
+
+class VacancyListItem(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    salary_from: Optional[int] = None
+    salary_to: Optional[int] = None
+    salary_currency: str = "BYN"
+    employment_type: Optional[str] = None
+    city: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    employer_id: Optional[int] = None
+    employer_name: Optional[str] = None
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VacancyListResponse(BaseModel):
+    items: list[VacancyListItem]
+    total: int
+    page: int
+    page_size: int
+
+
 # ── Route ──
 
 class RouteRequest(BaseModel):

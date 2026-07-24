@@ -114,7 +114,10 @@ class Vacancy(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text)
     status: Mapped[VacancyStatus] = mapped_column(
-        SAEnum(VacancyStatus), default=VacancyStatus.ACTIVE, server_default="active", index=True
+        SAEnum(VacancyStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=VacancyStatus.ACTIVE,
+        server_default="active",
+        index=True,
     )
 
     # Location — PostGIS geography point

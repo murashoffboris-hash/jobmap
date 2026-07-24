@@ -71,8 +71,6 @@ async def health_check():
     deps = {
         "postgresql": await _check_postgres(),
         "redis": await _check_redis(),
-        "nominatim": await _check_nominatim(),
-        "osrm": await _check_osrm(),
     }
 
     status = "ok" if all(v.startswith("ok") for v in deps.values()) else "degraded"
