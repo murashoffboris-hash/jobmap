@@ -116,7 +116,7 @@ class VacancyListItem(BaseModel):
     description: Optional[str] = None
     salary_from: Optional[int] = None
     salary_to: Optional[int] = None
-    salary_currency: str = "BYN"
+    salary_currency: str = Field("BYN", serialization_alias="currency")
     employment_type: Optional[str] = None
     city: Optional[str] = None
     latitude: Optional[float] = None
