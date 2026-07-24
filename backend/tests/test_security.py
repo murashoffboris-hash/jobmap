@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from jose import JWTError, jwt
+from jose import jwt
 
 from app.config import settings
 from app.services.auth import create_access_token, create_refresh_token, decode_token
@@ -30,24 +30,24 @@ class TestPasswordHashing:
 
     def test_verify_wrong_hash(self):
         """Verify returns False for corrupted hash."""
-        assert not verify_password("password", "$2b$12$invalidhash12345")
+        assert not verify_password("password", "not-a-valid-hash")
 
 
 # ── JWT tokens ───────────────────────────────────────────────────
 
 class TestJWT:
     def test_create_access_token(self):
-        """Create and decode an access token."""
-        token = create_access_token(data={"sub": 42})
+        """Create and decode an access token with string sub."""
+        token = create_access_token(data={"sub": "42"})
         payload = decode_token(token)
-        assert payload["sub"] == 42
+        assert payload["sub"] == "42"
         assert "exp" in payload
 
-    def test_access_token_expires_delta(self):
-        """Custom expires_delta is respected."""
+    def test_access_token_accepts_int_sub(self):
+        """Sub is auto-converted to string."""
         token = create_access_token(data={"sub": 1}, expires_delta=timedelta(hours=1))
         payload = decode_token(token)
-        assert payload["sub"] == 1
+        assert payload["sub"] == "1"
 
     def test_invalid_token_raises(self):
         """Decoding a tampered token raises 401-like exception."""
@@ -56,16 +56,15 @@ class TestJWT:
 
     def test_refresh_token_has_type_refresh(self):
         """Refresh token carries type='refresh' claim."""
-        token = create_refresh_token(data={"sub": 10})
+        token = create_refresh_token(data={"sub": "10"})
         payload = decode_token(token)
-        assert payload["sub"] == 10
+        assert payload["sub"] == "10"
         assert payload["type"] == "refresh"
 
     def test_expired_token_raises(self):
         """Expired token raises exception."""
-        from jose import ExpiredSignatureError
         expired = jwt.encode(
-            {"sub": 1, "exp": 0},  # already expired
+            {"sub": "1", "exp": 0},  # already expired
             settings.JWT_SECRET,
             algorithm="HS256",
         )

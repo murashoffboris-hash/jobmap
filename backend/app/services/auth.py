@@ -29,13 +29,16 @@ def create_access_token(
     """Create a signed HS256 JWT access token.
 
     Args:
-        data: Claims to embed (must include 'sub').
+        data: Claims to embed (must include 'sub' as int or str).
         expires_delta: Token lifetime override (default from config).
 
     Returns:
         Encoded JWT string.
     """
     to_encode = data.copy()
+    # python-jose requires 'sub' to be a string
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
@@ -49,6 +52,8 @@ def create_refresh_token(
 ) -> str:
     """Create a longer-lived refresh token."""
     to_encode = data.copy()
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
     )
@@ -90,12 +95,13 @@ async def get_current_user(
         HTTPException(401): If token missing, invalid, or user not found.
     """
     payload = decode_token(credentials.credentials)
-    user_id: int = payload.get("sub")
-    if user_id is None:
+    user_id_str: str | None = payload.get("sub")
+    if user_id_str is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
+    user_id = int(user_id_str)
 
     async with async_session_factory() as session:
         user = await session.get(User, user_id)
