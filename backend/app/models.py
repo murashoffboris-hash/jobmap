@@ -65,7 +65,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SAEnum(UserRole), default=UserRole.USER, server_default="user"
+        SAEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]),
+        default=UserRole.USER,
+        server_default="user",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
