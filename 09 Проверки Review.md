@@ -45,10 +45,13 @@
 - [x] UI-примитивы: Button, Input, Avatar, AuthShell
 - [x] TypeScript — 0 ошибок (`npx tsc --noEmit`)
 - [x] Билд — успешно (CSS 98KB / gzip 14.7KB)
+- [x] Карта MapLibre (MapContainer + маркеры)
+- [x] Список вакансий с пагинацией
+- [ ] Страница профиля (в работе — t_c33fdfe7)
 - [ ] Интеграционные тесты (frontend → backend)
 - [ ] E2E тесты (Playwright/Cypress)
 
 ## Тестирование
 - [x] 18 pytest passed, 4 skipped (backend)
-- [ ] Vitest для frontend
+- [x] Vitest для frontend — 14 passed (Button, Input, Avatar)
 - [ ] Интеграционные тесты API
