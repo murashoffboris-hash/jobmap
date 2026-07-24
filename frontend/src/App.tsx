@@ -7,6 +7,7 @@ import RegisterPage from "@/pages/RegisterPage";
 import VacancyListPage from "@/pages/VacancyListPage";
 import VacancyDetailPage from "@/pages/VacancyDetailPage";
 import NotFoundPage from "@/pages/NotFoundPage";
+import ProfilePage from "@/pages/ProfilePage";
 
 export default function App(): JSX.Element {
   return (
@@ -23,6 +24,14 @@ export default function App(): JSX.Element {
             element={
               <ProtectedRoute>
                 <VacancyDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
               </ProtectedRoute>
             }
           />

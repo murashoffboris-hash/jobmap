@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models import UserRole, VacancyStatus, ResponseStatus
 
@@ -31,10 +31,48 @@ class RefreshRequest(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: str
+    full_name: str | None = None
+    phone: str | None = None
+    bio: str | None = None
+    avatar_url: str | None = None
     role: UserRole
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str = Field(min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=32)
+    bio: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("full_name must not be empty")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        if not all(char.isdigit() or char in "+() -" for char in value):
+            raise ValueError("phone contains invalid characters")
+        return value
+
+    @field_validator("bio")
+    @classmethod
+    def normalize_bio(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 
 # ── Vacancies ──

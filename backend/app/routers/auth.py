@@ -15,6 +15,7 @@ from app.schemas import (
     LoginRequest,
     RefreshRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserResponse,
 )
 from app.services.auth import (
@@ -117,6 +118,43 @@ async def me(current_user: User = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
+        full_name=current_user.profile.full_name if current_user.profile else None,
+        phone=current_user.profile.phone if current_user.profile else None,
+        bio=current_user.profile.bio if current_user.profile else None,
+        avatar_url=current_user.profile.avatar_url if current_user.profile else None,
+        role=current_user.role,
+        is_active=current_user.is_active,
+    )
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    data: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Update the authenticated user's editable profile fields."""
+    profile_result = await session.execute(
+        select(Profile).where(Profile.user_id == current_user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if profile is None:
+        profile = Profile(user_id=current_user.id)
+        session.add(profile)
+
+    profile.full_name = data.full_name
+    profile.phone = data.phone
+    profile.bio = data.bio
+    await session.commit()
+    await session.refresh(profile)
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=profile.full_name,
+        phone=profile.phone,
+        bio=profile.bio,
+        avatar_url=profile.avatar_url,
         role=current_user.role,
         is_active=current_user.is_active,
     )
