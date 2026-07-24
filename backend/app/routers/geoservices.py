@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import async_session_factory
+from app.dependencies import get_session
 from app.schemas import (
     GeocodeRequest,
     GeocodeResponse,
@@ -16,10 +16,6 @@ from app.services.nominatim import geocode_address, reverse_geocode
 from app.services.osrm import get_route
 
 router = APIRouter(prefix="/api/geo", tags=["geoservices"])
-
-
-def get_session():
-    return async_session_factory
 
 
 @router.post("/geocode", response_model=GeocodeResponse)

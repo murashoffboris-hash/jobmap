@@ -1,4 +1,4 @@
-"""Health-check endpoint with real dependency checks."""
+"""Health-check endpoint — real dependency checks."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
+
+__all__ = ["router"]
 
 
 class HealthResponse(BaseModel):

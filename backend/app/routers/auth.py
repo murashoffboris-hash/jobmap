@@ -8,7 +8,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import async_session_factory
+from app.dependencies import get_session
 from app.models import User, Profile
 from app.schemas import (
     RegisterRequest,
@@ -28,11 +28,6 @@ from app.services.security import hash_password, verify_password
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 login_limiter = Limiter(key_func=get_remote_address, default_limits=["5/minute"])
-
-
-async def get_session():
-    async with async_session_factory() as session:
-        yield session
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
