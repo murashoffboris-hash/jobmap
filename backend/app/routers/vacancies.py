@@ -7,6 +7,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_session
 from app.models import User, Vacancy, VacancyStatus
@@ -25,7 +27,6 @@ from app.services.vacancies import (
     create_vacancy as create_vacancy_svc,
     update_vacancy as update_vacancy_svc,
 )
-from sqlalchemy import select, func
 
 logger = logging.getLogger(__name__)
 
@@ -45,18 +46,16 @@ async def list_vacancies(
     session: AsyncSession = Depends(get_session),
 ):
     """List vacancies — with optional geo-filter and pagination."""
-    from app.models import Profile
 
-    query = select(Vacancy).join(User, Vacancy.owner_id == User.id).outerjoin(Profile, User.id == Profile.user_id)
+    query = select(Vacancy).options(
+        selectinload(Vacancy.owner).selectinload(User.profile)
+    ).where(Vacancy.status == VacancyStatus.ACTIVE)
 
     # Geo filter
     if lat is not None and lon is not None:
         rows = await geo_search(session, lat, lon, radius_km, category_id)
-        # geo_search returns [(vacancy, distance_m), ...]
         vacancy_ids = [v.id for v, _ in rows]
         query = query.where(Vacancy.id.in_(vacancy_ids)) if vacancy_ids else query.where(Vacancy.id == -1)
-
-    query = query.where(Vacancy.status == VacancyStatus.ACTIVE)
 
     if search:
         query = query.where(Vacancy.title.ilike(f"%{search}%"))
@@ -102,10 +101,7 @@ async def create_vacancy(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_employer),
 ):
-    """Create a vacancy with optional geocoding of the address.
-
-    Requires employer or admin role.
-    """
+    """Create a vacancy with optional geocoding of the address."""
     vacancy = await create_vacancy_svc(session, data, current_user.id)
     return vacancy_to_response(vacancy)
 
@@ -129,17 +125,12 @@ async def update_vacancy(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Update vacancy fields. If address changes, re-geocode.
-
-    Only the owner (or admin) may update the vacancy.
-    """
+    """Update vacancy fields. Only owner or admin may update."""
     v = await session.get(Vacancy, vacancy_id)
     if not v:
         raise HTTPException(status_code=404, detail="Vacancy not found")
-
     if v.owner_id != current_user.id and current_user.role.value != "admin":
         raise HTTPException(status_code=403, detail="Not the owner of this vacancy")
-
     v = await update_vacancy_svc(session, v, data)
     return vacancy_to_response(v)
 
@@ -150,16 +141,11 @@ async def delete_vacancy(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Soft-delete vacancy (set status to archived).
-
-    Only the owner (or admin) may delete the vacancy.
-    """
+    """Soft-delete vacancy (set status to archived). Only owner or admin may delete."""
     v = await session.get(Vacancy, vacancy_id)
     if not v:
         raise HTTPException(status_code=404, detail="Vacancy not found")
-
     if v.owner_id != current_user.id and current_user.role.value != "admin":
         raise HTTPException(status_code=403, detail="Not the owner of this vacancy")
-
     v.status = VacancyStatus.ARCHIVED
     await session.commit()
