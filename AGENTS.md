@@ -4,7 +4,7 @@
 
 Кроссплатформенный сервис поиска работы и подработки.
 - Backend: **FastAPI + SQLAlchemy + PostgreSQL + PostGIS + Redis + Celery + MinIO**
-- Frontend (планируется): **React + TypeScript + Capacitor + PWA + MapLibre**
+- Frontend: **React 18 + TypeScript 5 + Vite 5 + Capacitor 6 + PWA + MapLibre 4**
 - Инфраструктура: **Docker Compose на VPS 104.237.11.110**
 - Репозиторий Git: `D:\Obsidian\HR` — ветка `infra/initial-audit`
 
