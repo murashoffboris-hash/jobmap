@@ -7,9 +7,18 @@ export interface User {
   id: number;
   email: string;
   full_name: string | null;
+  phone: string | null;
+  bio: string | null;
+  avatar_url: string | null;
   role: UserRole;
   is_active: boolean;
   created_at: string;
+}
+
+export interface UpdateProfileRequest {
+  full_name: string;
+  phone: string | null;
+  bio: string | null;
 }
 
 export interface AuthTokens {

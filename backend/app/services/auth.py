@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import async_session_factory
@@ -104,7 +105,12 @@ async def get_current_user(
     user_id = int(user_id_str)
 
     async with async_session_factory() as session:
-        user = await session.get(User, user_id)
+        result = await session.execute(
+            select(User)
+            .options(selectinload(User.profile))
+            .where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
         if user is None or not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

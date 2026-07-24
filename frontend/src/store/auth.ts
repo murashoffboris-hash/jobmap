@@ -11,6 +11,7 @@ interface AuthState {
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (user: User) => void;
   clearError: () => void;
 }
 
@@ -70,6 +71,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       setAccessToken(null);
       set({ user: null, status: "idle", error: null });
     }
+  },
+
+  updateUser(user) {
+    set({ user, status: "authenticated", error: null });
   },
 
   clearError() {
