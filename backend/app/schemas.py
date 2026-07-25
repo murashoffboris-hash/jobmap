@@ -113,6 +113,7 @@ class VacancyResponse(BaseModel):
     address_normalized: Optional[str] = None
     location_lat: Optional[float] = None
     location_lon: Optional[float] = None
+    geocode_status: str = "not_requested"  # "success", "failed", "not_requested"
     salary_from: Optional[int] = None
     salary_to: Optional[int] = None
     salary_currency: str

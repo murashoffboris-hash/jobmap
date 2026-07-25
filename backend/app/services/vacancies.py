@@ -18,7 +18,21 @@ logger = logging.getLogger(__name__)
 
 
 def vacancy_to_response(v: Vacancy) -> VacancyResponse:
-    """Convert a Vacancy ORM model to a Pydantic response."""
+    """Convert a Vacancy ORM model to a Pydantic response.
+
+    Computes geocode_status:
+      - "success"       — address was provided and coordinates are present
+      - "failed"        — address was provided but geocoding failed (no coords)
+      - "not_requested" — no address was provided
+    """
+    if v.address_raw:
+        if v.location_lat is not None and v.location_lon is not None:
+            geocode_status = "success"
+        else:
+            geocode_status = "failed"
+    else:
+        geocode_status = "not_requested"
+
     return VacancyResponse(
         id=v.id,
         title=v.title,
@@ -27,6 +41,7 @@ def vacancy_to_response(v: Vacancy) -> VacancyResponse:
         address_normalized=v.address_normalized,
         location_lat=v.location_lat,
         location_lon=v.location_lon,
+        geocode_status=geocode_status,
         salary_from=v.salary_from,
         salary_to=v.salary_to,
         salary_currency=v.salary_currency,
@@ -108,6 +123,11 @@ async def create_vacancy(
         geo = await geocode_address(session, data.address)
         if geo:
             _apply_geo(vacancy, geo)
+        else:
+            logger.warning(
+                "Geocoding failed for vacancy '%s' address='%s' — saved without coordinates",
+                data.title, data.address,
+            )
 
     session.add(vacancy)
     await session.commit()
@@ -128,6 +148,11 @@ async def update_vacancy(
         geo = await geocode_address(session, vacancy.address_raw, vacancy_id=vacancy.id)
         if geo:
             _apply_geo(vacancy, geo)
+        else:
+            logger.warning(
+                "Geocoding failed for vacancy id=%s address='%s' — updated without coordinates",
+                vacancy.id, vacancy.address_raw,
+            )
 
     for key, value in update_data.items():
         setattr(vacancy, key, value)

@@ -36,9 +36,15 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    # Geoservices (internal Docker names)
+    # Geoservices — primary (internal Docker / VPN) + public fallback
     NOMINATIM_URL: str = "http://nominatim:8080"
+    NOMINATIM_FALLBACK_URL: str = "https://nominatim.openstreetmap.org"
+    NOMINATIM_TIMEOUT: int = 5  # seconds for primary, before falling back
+    NOMINATIM_USER_AGENT: str = "JobMap/1.0 (admin@service247.by)"
+
     OSRM_URL: str = "http://osrm:5000"
+    OSRM_FALLBACK_URL: str = "https://router.project-osrm.org"
+    OSRM_TIMEOUT: int = 5  # seconds for primary, before falling back
 
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
