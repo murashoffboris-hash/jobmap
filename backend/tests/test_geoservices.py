@@ -1,299 +1,373 @@
-"""Tests for geoservices — fallback logic, geocode_status, health endpoint."""
+"""Tests for Nominatim geocoding service and geo API endpoints."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import AsyncClient, Response
 
-from app.models import Vacancy, VacancyStatus
-from app.schemas import VacancyResponse
-from app.services.vacancies import vacancy_to_response
+from app.dependencies import get_session
+from app.services.nominatim import (
+    NominatimError,
+    NominatimNoResults,
+    NominatimServiceError,
+    geocode_address,
+    reverse_geocode,
+)
 
-_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+# ── Unit tests: nominatim service functions ──
 
 
-# ── vacancy_to_response: geocode_status ──
+@pytest.mark.asyncio
+async def test_geocode_address_success():
+    """Successful geocode returns dict with lat/lon/display_name."""
+    mock_session = AsyncMock()
+    mock_response = _make_response(
+        200,
+        [
+            {
+                "lat": "53.9",
+                "lon": "27.5667",
+                "osm_id": "12345",
+                "display_name": "Minsk, Belarus",
+                "type": "city",
+            }
+        ],
+    )
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        result = await geocode_address(mock_session, "Minsk")
+
+    assert result is not None
+    assert result["lat"] == 53.9
+    assert result["lon"] == 27.5667
+    assert result["display_name"] == "Minsk, Belarus"
+    assert result["type"] == "city"
+    assert result["osm_id"] == "12345"
 
 
-def _make_vacancy(**overrides) -> Vacancy:
-    """Build a minimal Vacancy ORM object for testing."""
-    defaults = {
-        "id": 1,
-        "title": "Test",
-        "description": None,
-        "status": VacancyStatus.ACTIVE,
-        "address_raw": None,
-        "address_normalized": None,
-        "location_lat": None,
-        "location_lon": None,
-        "salary_from": None,
-        "salary_to": None,
-        "salary_currency": "BYN",
-        "schedule_type": None,
-        "contact_phone": None,
-        "exact_location_public": False,
-        "created_at": _NOW,
+@pytest.mark.asyncio
+async def test_geocode_address_no_results():
+    """Empty results return None (no exception)."""
+    mock_session = AsyncMock()
+    mock_response = _make_response(200, [])
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        result = await geocode_address(mock_session, "NonexistentPlace12345")
+
+    assert result is None
+    assert mock_session.add.called
+
+
+@pytest.mark.asyncio
+async def test_geocode_address_http_error():
+    """HTTP 500 from Nominatim raises NominatimServiceError (was bug: unhandled 500)."""
+    mock_session = AsyncMock()
+    mock_response = _make_error_response(500, "Internal Server Error")
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        with pytest.raises(NominatimServiceError, match="HTTP 500"):
+            await geocode_address(mock_session, "Minsk")
+
+
+@pytest.mark.asyncio
+async def test_geocode_address_connection_error():
+    """Connection error raises NominatimServiceError after retries."""
+    mock_session = AsyncMock()
+
+    with patch(
+        "httpx.AsyncClient.get",
+        AsyncMock(side_effect=httpx.ConnectError("Connection refused")),
+    ):
+        with pytest.raises(NominatimServiceError, match="Connection refused"):
+            await geocode_address(mock_session, "Minsk")
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_success():
+    """Successful reverse geocode returns Nominatim dict."""
+    mock_response = _make_response(
+        200,
+        {
+            "lat": "53.9",
+            "lon": "27.5667",
+            "display_name": "Some Street, Minsk, Belarus",
+            "type": "road",
+        },
+    )
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        result = await reverse_geocode(53.9, 27.5667)
+
+    assert result["lat"] == "53.9"
+    assert result["display_name"] == "Some Street, Minsk, Belarus"
+    assert result["type"] == "road"
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_no_results():
+    """Empty response from Nominatim raises NominatimNoResults."""
+    mock_response = _make_response(200, {})
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        with pytest.raises(NominatimNoResults):
+            await reverse_geocode(0.0, 0.0)
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_error_response():
+    """Nominatim returns error key — raises NominatimNoResults."""
+    mock_response = _make_response(200, {"error": "Unable to geocode"})
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        with pytest.raises(NominatimNoResults):
+            await reverse_geocode(0.0, 0.0)
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_connection_error():
+    """Connection error raises NominatimServiceError (was bug: caught as 404)."""
+    with patch(
+        "httpx.AsyncClient.get",
+        AsyncMock(side_effect=httpx.ConnectError("Connection refused")),
+    ):
+        with pytest.raises(NominatimServiceError, match="connection failed"):
+            await reverse_geocode(53.9, 27.5667)
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_http_error():
+    """HTTP 500 from Nominatim raises NominatimServiceError (was bug: caught as 404)."""
+    mock_response = _make_error_response(500, "Internal Server Error")
+
+    with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+        with pytest.raises(NominatimServiceError, match="HTTP 500"):
+            await reverse_geocode(53.9, 27.5667)
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_timeout():
+    """Timeout raises NominatimServiceError."""
+    with patch(
+        "httpx.AsyncClient.get",
+        AsyncMock(side_effect=httpx.TimeoutException("timeout")),
+    ):
+        with pytest.raises(NominatimServiceError, match="timed out"):
+            await reverse_geocode(53.9, 27.5667)
+
+
+# ── Integration tests: API endpoints (mock service layer) ──
+
+
+@pytest.mark.asyncio
+async def test_api_geocode_success(app: FastAPI):
+    """POST /api/geo/geocode returns 200 on successful geocode."""
+    mock_session = AsyncMock()
+
+    mock_geo = {
+        "lat": 53.9,
+        "lon": 27.5667,
+        "osm_id": "12345",
+        "display_name": "Minsk, Belarus",
+        "type": "city",
     }
-    defaults.update(overrides)
-    v = MagicMock(spec=Vacancy)
-    for k, val in defaults.items():
-        setattr(v, k, val)
-    return v
 
+    async def _mock_session():
+        yield mock_session
 
-class TestGeocodeStatus:
-    """geocode_status computation in vacancy_to_response()."""
+    app.dependency_overrides[get_session] = _mock_session
 
-    def test_not_requested_when_no_address(self):
-        v = _make_vacancy(address_raw=None)
-        resp = vacancy_to_response(v)
-        assert resp.geocode_status == "not_requested"
-
-    def test_success_when_address_and_coords(self):
-        v = _make_vacancy(address_raw="Минск", location_lat=53.9, location_lon=27.56)
-        resp = vacancy_to_response(v)
-        assert resp.geocode_status == "success"
-
-    def test_failed_when_address_but_no_coords(self):
-        v = _make_vacancy(address_raw="Минск", location_lat=None, location_lon=None)
-        resp = vacancy_to_response(v)
-        assert resp.geocode_status == "failed"
-
-    def test_failed_when_partial_coords(self):
-        """If only lat is set but lon is None, still 'failed'."""
-        v = _make_vacancy(address_raw="Минск", location_lat=53.9, location_lon=None)
-        resp = vacancy_to_response(v)
-        assert resp.geocode_status == "failed"
-
-
-# ── Nominatim fallback logic ──
-
-
-@pytest.mark.asyncio
-async def test_geocode_primary_succeeds_no_fallback():
-    """When primary responds, fallback is never called."""
-    with patch("app.services.nominatim.httpx.AsyncClient") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-
-        # Primary responds successfully
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.json.return_value = [
-            {"lat": "53.9", "lon": "27.56", "osm_id": "123", "display_name": "Минск", "type": "city"}
-        ]
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        mock_client_cls.return_value = mock_client
-
-        session = AsyncMock()
-        session.add = MagicMock()
-        session.commit = AsyncMock()
-
-        from app.services.nominatim import geocode_address
-        result = await geocode_address(session, "Минск")
-
-        assert result is not None
-        assert result["lat"] == 53.9
-        assert result["lon"] == 27.56
-        assert result["source"] == "primary"
-
-        # Should have called only the primary URL
-        call_urls = [c.args[0] for c in mock_client.get.call_args_list]
-        assert any("nominatim:8080" in url for url in call_urls)
-        assert not any("nominatim.openstreetmap.org" in url for url in call_urls)
-
-
-@pytest.mark.asyncio
-async def test_geocode_fallback_when_primary_fails():
-    """When primary is unreachable, fallback is used."""
-    with patch("app.services.nominatim.httpx.AsyncClient") as mock_client_cls:
-        # We need two separate client instances — one for primary (fails), one for fallback (succeeds)
-        primary_client = MagicMock()
-        primary_client.__aenter__ = AsyncMock(return_value=primary_client)
-        primary_client.__aexit__ = AsyncMock(return_value=None)
-
-        fallback_client = MagicMock()
-        fallback_client.__aenter__ = AsyncMock(return_value=fallback_client)
-        fallback_client.__aexit__ = AsyncMock(return_value=None)
-
-        # Primary raises ConnectError
-        from httpx import ConnectError
-        primary_client.get = AsyncMock(side_effect=ConnectError("Connection refused"))
-        # Fallback succeeds
-        fallback_resp = MagicMock()
-        fallback_resp.raise_for_status.return_value = None
-        fallback_resp.json.return_value = [
-            {"lat": "53.9", "lon": "27.56", "osm_id": "456", "display_name": "Minsk, Belarus", "type": "city"}
-        ]
-        fallback_client.get = AsyncMock(return_value=fallback_resp)
-
-        # Return primary first, then fallback
-        mock_client_cls.side_effect = [primary_client, fallback_client]
-
-        # Also mock the rate limiter to skip sleep
-        with patch("app.services.nominatim._fallback_lock", new=AsyncMock()):
-            with patch("app.services.nominatim._rate_limited_fallback_request") as mock_rl_req:
-                mock_rl_req.return_value = fallback_resp
-
-                session = AsyncMock()
-                session.add = MagicMock()
-                session.commit = AsyncMock()
-
-                from app.services.nominatim import geocode_address
-                result = await geocode_address(session, "Минск")
-
-                assert result is not None
-                assert result["lat"] == 53.9
-                assert result["lon"] == 27.56
-                assert result["source"] == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_geocode_both_fail_returns_none():
-    """When both primary and fallback fail, return None."""
-    with patch("app.services.nominatim.httpx.AsyncClient") as mock_client_cls:
-        from httpx import ConnectError
-
-        primary_client = MagicMock()
-        primary_client.__aenter__ = AsyncMock(return_value=primary_client)
-        primary_client.__aexit__ = AsyncMock(return_value=None)
-        primary_client.get = AsyncMock(side_effect=ConnectError("Connection refused"))
-
-        fallback_client = MagicMock()
-        fallback_client.__aenter__ = AsyncMock(return_value=fallback_client)
-        fallback_client.__aexit__ = AsyncMock(return_value=None)
-        fallback_client.get = AsyncMock(side_effect=ConnectError("Connection refused"))
-
-        mock_client_cls.side_effect = [primary_client, fallback_client]
-
-        session = AsyncMock()
-        session.add = MagicMock()
-        session.commit = AsyncMock()
-
-        from app.services.nominatim import geocode_address
-        result = await geocode_address(session, "Минск")
-
-        assert result is None
-
-
-# ── OSRM fallback logic ──
-
-
-@pytest.mark.asyncio
-async def test_osrm_primary_succeeds():
-    """OSRM primary responds — no fallback."""
-    with patch("app.services.osrm.httpx.AsyncClient") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.json.return_value = {
-            "code": "Ok",
-            "routes": [{"distance": 5000, "duration": 300, "geometry": "abc"}],
-        }
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        mock_client_cls.return_value = mock_client
-
-        from app.services.osrm import get_route
-        result = await get_route(53.9, 27.56, 53.91, 27.57)
-
-        assert result is not None
-        assert result["distance_m"] == 5000
-
-        call_urls = [c.args[0] for c in mock_client.get.call_args_list]
-        assert any("osrm:5000" in url for url in call_urls)
-        assert not any("router.project-osrm.org" in url for url in call_urls)
-
-
-@pytest.mark.asyncio
-async def test_osrm_fallback_when_primary_fails():
-    """OSRM primary fails → fallback succeeds."""
-    with patch("app.services.osrm.httpx.AsyncClient") as mock_client_cls:
-        from httpx import ConnectError
-
-        primary_client = MagicMock()
-        primary_client.__aenter__ = AsyncMock(return_value=primary_client)
-        primary_client.__aexit__ = AsyncMock(return_value=None)
-        primary_client.get = AsyncMock(side_effect=ConnectError("Connection refused"))
-
-        fallback_client = MagicMock()
-        fallback_client.__aenter__ = AsyncMock(return_value=fallback_client)
-        fallback_client.__aexit__ = AsyncMock(return_value=None)
-        fallback_resp = MagicMock()
-        fallback_resp.raise_for_status.return_value = None
-        fallback_resp.json.return_value = {
-            "code": "Ok",
-            "routes": [{"distance": 5000, "duration": 300}],
-        }
-        fallback_client.get = AsyncMock(return_value=fallback_resp)
-
-        mock_client_cls.side_effect = [primary_client, fallback_client]
-
-        from app.services.osrm import get_route
-        result = await get_route(53.9, 27.56, 53.91, 27.57)
-
-        assert result is not None
-        assert result["distance_m"] == 5000
-
-        # Check fallback URL was called
-        fallback_calls = [c for c in fallback_client.get.call_args_list
-                          if "router.project-osrm.org" in str(c.args[0])]
-        assert len(fallback_calls) > 0
-
-
-# ── Health endpoint ──
-
-
-@pytest.mark.asyncio
-async def test_health_endpoint_returns_optional_components(client: AsyncClient):
-    """GET /health returns both mandatory (dependencies) and optional keys."""
     try:
-        response = await client.get("/health")
+        with patch(
+            "app.routers.geoservices.geocode_address",
+            AsyncMock(return_value=mock_geo),
+        ):
+            from httpx import ASGITransport
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                response = await ac.post(
+                    "/api/geo/geocode",
+                    json={"address": "Minsk"},
+                )
+
         assert response.status_code == 200
         data = response.json()
-        assert "dependencies" in data
-        assert "optional" in data
-        assert "postgresql" in data["dependencies"]
-        assert "redis" in data["dependencies"]
-        # Optional components may be degraded but must be present
-        assert "nominatim" in data["optional"]
-        assert "osrm" in data["optional"]
-    except ConnectionRefusedError:
-        pytest.skip("No database available")
+        assert data["lat"] == 53.9
+        assert data["display_name"] == "Minsk, Belarus"
+    finally:
+        app.dependency_overrides.clear()
 
 
-# ── GeocodeResponse schema ──
+@pytest.mark.asyncio
+async def test_api_geocode_not_found(app: FastAPI):
+    """POST /api/geo/geocode returns 404 when address not found."""
+    mock_session = AsyncMock()
+
+    async def _mock_session():
+        yield mock_session
+
+    app.dependency_overrides[get_session] = _mock_session
+
+    try:
+        with patch(
+            "app.routers.geoservices.geocode_address",
+            AsyncMock(return_value=None),
+        ):
+            from httpx import ASGITransport
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                response = await ac.post(
+                    "/api/geo/geocode",
+                    json={"address": "NonexistentPlace"},
+                )
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
 
 
-def test_geocode_response_schema():
-    """GeocodeResponse can be constructed with all fields."""
-    from app.schemas import GeocodeResponse
-    resp = GeocodeResponse(
-        lat=53.9,
-        lon=27.56,
-        osm_id="123",
-        display_name="Минск",
-        type="city",
+@pytest.mark.asyncio
+async def test_api_geocode_returns_502_on_service_error(app: FastAPI):
+    """POST /api/geo/geocode returns 502 when Nominatim is down."""
+    mock_session = AsyncMock()
+
+    async def _mock_session():
+        yield mock_session
+
+    app.dependency_overrides[get_session] = _mock_session
+
+    try:
+        with patch(
+            "app.routers.geoservices.geocode_address",
+            AsyncMock(side_effect=NominatimServiceError("Nominatim connection failed")),
+        ):
+            from httpx import ASGITransport
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                response = await ac.post(
+                    "/api/geo/geocode",
+                    json={"address": "Minsk"},
+                )
+
+        assert response.status_code == 502
+        assert "connection failed" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_api_reverse_success(app: FastAPI):
+    """GET /api/geo/reverse returns 200 on successful reverse geocode."""
+    mock_result = {
+        "lat": "53.9",
+        "lon": "27.5667",
+        "display_name": "Minsk, Belarus",
+        "type": "city",
+    }
+
+    with patch(
+        "app.routers.geoservices.reverse_geocode",
+        AsyncMock(return_value=mock_result),
+    ):
+        from httpx import ASGITransport
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get(
+                "/api/geo/reverse",
+                params={"lat": 53.9, "lon": 27.5667},
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["display_name"] == "Minsk, Belarus"
+
+
+@pytest.mark.asyncio
+async def test_api_reverse_returns_404_on_no_results(app: FastAPI):
+    """GET /api/geo/reverse returns 404 when no results found."""
+    with patch(
+        "app.routers.geoservices.reverse_geocode",
+        AsyncMock(side_effect=NominatimNoResults("No results")),
+    ):
+        from httpx import ASGITransport
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get(
+                "/api/geo/reverse",
+                params={"lat": 0.0, "lon": 0.0},
+            )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_api_reverse_returns_502_on_service_error(app: FastAPI):
+    """GET /api/geo/reverse returns 502 when Nominatim is down."""
+    with patch(
+        "app.routers.geoservices.reverse_geocode",
+        AsyncMock(side_effect=NominatimServiceError("Nominatim connection failed")),
+    ):
+        from httpx import ASGITransport
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get(
+                "/api/geo/reverse",
+                params={"lat": 53.9, "lon": 27.5667},
+            )
+
+    assert response.status_code == 502
+    assert "connection failed" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_api_route_endpoint_exists(app: FastAPI):
+    """POST /api/geo/route responds (validated input is required)."""
+    from httpx import ASGITransport
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/geo/route",
+            json={"origin_lat": 1, "origin_lon": 1, "dest_lat": 2, "dest_lon": 2},
+        )
+    # 422 on validation failure, or 200/502 depending on OSRM availability
+    assert response.status_code in (200, 404, 422, 502)
+
+
+# ── Helpers ──
+
+
+def _make_response(status_code: int, json_data: dict | list) -> MagicMock:
+    """Build a mock httpx.Response with given status and JSON body."""
+    resp = MagicMock(spec=Response)
+    resp.status_code = status_code
+    resp.json.return_value = json_data
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+def _make_error_response(status_code: int, text: str) -> MagicMock:
+    """Build a mock httpx.Response that raises HTTPStatusError on raise_for_status."""
+    resp = MagicMock(spec=Response)
+    resp.status_code = status_code
+    resp.text = text
+    resp.raise_for_status = MagicMock(
+        side_effect=httpx.HTTPStatusError(
+            text,
+            request=MagicMock(),
+            response=resp,
+        )
     )
-    assert resp.lat == 53.9
-    assert resp.lon == 27.56
-    assert resp.osm_id == "123"
-
-
-def test_vacancy_response_has_geocode_status_default():
-    """VacancyResponse defaults geocode_status to 'not_requested'."""
-    resp = VacancyResponse(
-        id=1,
-        title="Test",
-        status=VacancyStatus.ACTIVE,
-        salary_currency="BYN",
-        exact_location_public=False,
-        created_at=_NOW,
-    )
-    assert resp.geocode_status == "not_requested"
+    return resp

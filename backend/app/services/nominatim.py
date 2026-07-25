@@ -1,10 +1,8 @@
-"""Nominatim geocoding service with caching, retries, fallback, and logging."""
+"""Nominatim geocoding service with caching, retries, and logging."""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from typing import Any
 
 import httpx
@@ -15,57 +13,21 @@ from app.models import GeocodingLog
 
 logger = logging.getLogger(__name__)
 
-# ── Rate limiter for public Nominatim (1 req/s per usage policy) ──
-
-_fallback_lock = asyncio.Lock()
-_fallback_last_request: float = 0.0
-_FALLBACK_MIN_INTERVAL: float = 1.0  # seconds between requests
+# Timeouts
+NOMINATIM_TIMEOUT = 10  # seconds
+NOMINATIM_RETRIES = 3
 
 
-async def _rate_limited_fallback_request(client: httpx.AsyncClient, url: str, params: dict) -> httpx.Response:
-    """Make a rate-limited request to the public Nominatim fallback (1 req/s)."""
-    global _fallback_last_request
-    async with _fallback_lock:
-        elapsed = time.monotonic() - _fallback_last_request
-        if elapsed < _FALLBACK_MIN_INTERVAL:
-            await asyncio.sleep(_FALLBACK_MIN_INTERVAL - elapsed)
-        _fallback_last_request = time.monotonic()
-    return await client.get(url, params=params)
+class NominatimError(Exception):
+    """Base exception for Nominatim service errors."""
 
 
-# ── Shared helpers ──
-
-def _build_search_params(address: str) -> dict[str, str]:
-    return {
-        "q": address,
-        "format": "jsonv2",
-        "limit": "1",
-        "addressdetails": "1",
-    }
+class NominatimServiceError(NominatimError):
+    """Upstream Nominatim service is unavailable or returned an error."""
 
 
-async def _try_geocode(
-    url: str,
-    params: dict[str, str],
-    timeout: float,
-    headers: dict[str, str] | None = None,
-    use_rate_limit: bool = False,
-) -> httpx.Response | None:
-    """Attempt a single geocoding request to one Nominatim instance.
-
-    Returns the response on success, or None on any transport-level error.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=timeout, headers=headers or {}) as client:
-            if use_rate_limit:
-                resp = await _rate_limited_fallback_request(client, url, params)
-            else:
-                resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            return resp
-    except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as exc:
-        logger.debug("Nominatim request to %s failed: %s", url, exc)
-        return None
+class NominatimNoResults(NominatimError):
+    """Nominatim returned zero results for the query."""
 
 
 async def geocode_address(
@@ -73,112 +35,151 @@ async def geocode_address(
     address: str,
     vacancy_id: int | None = None,
 ) -> dict[str, Any] | None:
-    """Geocode an address string via Nominatim with primary → fallback chain.
+    """Geocode an address string via Nominatim.
 
-    Tries the primary (internal) Nominatim first with a short timeout.
-    On failure, falls back to the public Nominatim with rate limiting.
+    Returns dict with lat, lon, osm_id, display_name, type or None.
     Logs every attempt to the geocoding_log table.
-
-    Returns dict with lat, lon, osm_id, display_name, type, source or None.
     """
-    params = _build_search_params(address)
-    search_path = f"{settings.NOMINATIM_URL}/search"
-    fallback_path = f"{settings.NOMINATIM_FALLBACK_URL}/search"
-    fallback_headers = {"User-Agent": settings.NOMINATIM_USER_AGENT}
+    params = {
+        "q": address,
+        "format": "jsonv2",
+        "limit": "1",
+        "addressdetails": "1",
+    }
 
-    source: str = "none"
-    data = None
-    last_error: str | None = None
+    last_error = None
+    for attempt in range(1, NOMINATIM_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=NOMINATIM_TIMEOUT) as client:
+                resp = await client.get(f"{settings.NOMINATIM_URL}/search", params=params)
+                resp.raise_for_status()
+                data = resp.json()
 
-    # ── Step 1: primary (internal) Nominatim ──
-    logger.debug("Geocoding '%s' via primary %s", address, search_path)
-    resp = await _try_geocode(
-        search_path, params, timeout=settings.NOMINATIM_TIMEOUT,
-    )
-    if resp is not None:
-        data = resp.json()
-        source = "primary"
-    else:
-        # ── Step 2: fallback to public Nominatim ──
-        logger.info(
-            "Primary Nominatim unavailable, falling back to %s for '%s'",
-            settings.NOMINATIM_FALLBACK_URL, address,
-        )
-        resp = await _try_geocode(
-            fallback_path, params,
-            timeout=10.0,  # public Nominatim may be slower
-            headers=fallback_headers,
-            use_rate_limit=True,
-        )
-        if resp is not None:
-            data = resp.json()
-            source = "fallback"
-        else:
-            last_error = "Both primary and fallback Nominatim failed"
+                if not data:
+                    log_entry = GeocodingLog(
+                        address_raw=address,
+                        success=False,
+                        vacancy_id=vacancy_id,
+                        error_message="No results from Nominatim",
+                    )
+                    session.add(log_entry)
+                    await session.commit()
+                    return None
 
-    # ── Handle result ──
+                result = data[0]
+                log_entry = GeocodingLog(
+                    address_raw=address,
+                    address_normalized=result.get("display_name", ""),
+                    lat=float(result["lat"]),
+                    lon=float(result["lon"]),
+                    osm_id=str(result.get("osm_id", "")),
+                    result_type=result.get("type", ""),
+                    accuracy=None,
+                    raw_response=result,
+                    success=True,
+                    vacancy_id=vacancy_id,
+                )
+                session.add(log_entry)
+                await session.commit()
+                return {
+                    "lat": log_entry.lat,
+                    "lon": log_entry.lon,
+                    "osm_id": log_entry.osm_id,
+                    "display_name": log_entry.address_normalized,
+                    "type": log_entry.result_type,
+                }
 
-    if not data:
-        log_entry = GeocodingLog(
-            address_raw=address,
-            success=False,
-            vacancy_id=vacancy_id,
-            error_message=last_error or "No results from Nominatim",
-        )
-        session.add(log_entry)
-        await session.commit()
-        return None
+        except (httpx.TimeoutException, httpx.ConnectError) as exc:
+            last_error = str(exc)
+            logger.warning(
+                "Nominatim geocoding attempt %d/%d failed: %s",
+                attempt, NOMINATIM_RETRIES, exc,
+            )
+            if attempt < NOMINATIM_RETRIES:
+                continue
 
-    result = data[0]
+        except httpx.HTTPStatusError as exc:
+            # Nominatim returned a non-2xx response — do not retry
+            last_error = f"HTTP {exc.response.status_code}: {exc.response.text[:200]}"
+            logger.error(
+                "Nominatim geocoding returned error status %d on attempt %d/%d",
+                exc.response.status_code, attempt, NOMINATIM_RETRIES,
+            )
+            break
+
+    # All retries exhausted
     log_entry = GeocodingLog(
         address_raw=address,
-        address_normalized=result.get("display_name", ""),
-        lat=float(result["lat"]),
-        lon=float(result["lon"]),
-        osm_id=str(result.get("osm_id", "")),
-        result_type=result.get("type", ""),
-        accuracy=None,
-        raw_response=result,
-        success=True,
+        success=False,
         vacancy_id=vacancy_id,
+        error_message=f"All retries exhausted: {last_error}",
     )
     session.add(log_entry)
     await session.commit()
-    return {
-        "lat": log_entry.lat,
-        "lon": log_entry.lon,
-        "osm_id": log_entry.osm_id,
-        "display_name": log_entry.address_normalized,
-        "type": log_entry.result_type,
-        "source": source,
-    }
+    raise NominatimServiceError(
+        f"Nominatim geocoding failed after {attempt} attempt(s): {last_error}"
+    )
 
 
-async def reverse_geocode(lat: float, lon: float) -> dict[str, Any] | None:
-    """Reverse geocode coordinates to an address — primary → fallback chain."""
+async def reverse_geocode(lat: float, lon: float) -> dict[str, Any]:
+    """Reverse geocode coordinates to an address.
+
+    Returns:
+        dict with lat, lon, display_name, type etc.
+
+    Raises:
+        NominatimServiceError: if the upstream service is unreachable or returns an error.
+        NominatimNoResults: if no results found for the given coordinates.
+    """
     params = {
         "lat": str(lat),
         "lon": str(lon),
         "format": "jsonv2",
         "addressdetails": "1",
     }
-    reverse_path = f"{settings.NOMINATIM_URL}/reverse"
-    fallback_path = f"{settings.NOMINATIM_FALLBACK_URL}/reverse"
-    fallback_headers = {"User-Agent": settings.NOMINATIM_USER_AGENT}
+    try:
+        async with httpx.AsyncClient(timeout=NOMINATIM_TIMEOUT) as client:
+            resp = await client.get(f"{settings.NOMINATIM_URL}/reverse", params=params)
+            resp.raise_for_status()
+            data = resp.json()
 
-    # Step 1: primary
-    resp = await _try_geocode(reverse_path, params, timeout=settings.NOMINATIM_TIMEOUT)
-    if resp is not None:
-        return resp.json()
+            if not data or "error" in data:
+                logger.warning(
+                    "Nominatim reverse geocode returned no results for lat=%s, lon=%s",
+                    lat, lon,
+                )
+                raise NominatimNoResults(
+                    f"No results for coordinates lat={lat}, lon={lon}"
+                )
 
-    # Step 2: fallback
-    logger.info("Reverse geocode falling back to %s", settings.NOMINATIM_FALLBACK_URL)
-    resp = await _try_geocode(
-        fallback_path, params, timeout=10.0,
-        headers=fallback_headers, use_rate_limit=True,
-    )
-    if resp is not None:
-        return resp.json()
+            return data
 
-    logger.warning("Reverse geocode failed for lat=%s, lon=%s — both primary and fallback", lat, lon)
-    return None
+    except httpx.TimeoutException as exc:
+        logger.error("Nominatim reverse geocode timed out: %s", exc)
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode timed out after {NOMINATIM_TIMEOUT}s"
+        ) from exc
+
+    except httpx.ConnectError as exc:
+        logger.error("Nominatim reverse geocode connection failed: %s", exc)
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode connection failed: {exc}"
+        ) from exc
+
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "Nominatim reverse geocode returned HTTP %d: %s",
+            exc.response.status_code, exc.response.text[:200],
+        )
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode returned HTTP {exc.response.status_code}"
+        ) from exc
+
+    except NominatimNoResults:
+        raise
+
+    except Exception as exc:
+        logger.error("Nominatim reverse geocode unexpected error: %s", exc)
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode unexpected error: {exc}"
+        ) from exc

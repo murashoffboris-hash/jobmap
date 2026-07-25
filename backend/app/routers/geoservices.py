@@ -12,7 +12,12 @@ from app.schemas import (
     RouteRequest,
     RouteResponse,
 )
-from app.services.nominatim import geocode_address, reverse_geocode
+from app.services.nominatim import (
+    geocode_address,
+    reverse_geocode,
+    NominatimNoResults,
+    NominatimServiceError,
+)
 from app.services.osrm import get_route
 
 router = APIRouter(prefix="/api/geo", tags=["geoservices"])
@@ -24,7 +29,10 @@ async def geocode(
     session: AsyncSession = Depends(get_session),
 ):
     """Geocode an address via Nominatim (through backend)."""
-    result = await geocode_address(session, data.address)
+    try:
+        result = await geocode_address(session, data.address)
+    except NominatimServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
     if not result:
         raise HTTPException(status_code=404, detail="Address not found")
     return GeocodeResponse(**result)
@@ -33,9 +41,12 @@ async def geocode(
 @router.get("/reverse", response_model=GeocodeResponse)
 async def reverse(lat: float, lon: float):
     """Reverse geocode coordinates via Nominatim."""
-    result = await reverse_geocode(lat, lon)
-    if not result:
+    try:
+        result = await reverse_geocode(lat, lon)
+    except NominatimNoResults:
         raise HTTPException(status_code=404, detail="Coordinates not found")
+    except NominatimServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
     return GeocodeResponse(
         lat=result.get("lat"),
         lon=result.get("lon"),
