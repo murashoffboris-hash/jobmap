@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "job_service"
     POSTGRES_USER: str = "job_service"
-    POSTGRES_PASSWORD: str = "CHANGE_ME"
+    POSTGRES_PASSWORD: str = ""
 
     @property
     def database_url(self) -> str:
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
 
     # Auth
-    JWT_SECRET: str = "CHANGE_ME"
+    JWT_SECRET: str = ""
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     BCRYPT_ROUNDS: int = 12
@@ -58,8 +58,8 @@ class Settings(BaseSettings):
 
     # S3 storage
     S3_ENDPOINT: str = ""
-    S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadmin"
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
     S3_BUCKET_NAME: str = "job-service"
 
     model_config = {
