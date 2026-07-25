@@ -16,6 +16,10 @@ from app.routers.auth import router as auth_router
 from app.routers.geoservices import router as geo_router
 from app.routers.health import router as health_router
 from app.routers.vacancies import router as vacancies_router
+from app.routers.applications import (
+    router as applications_router,
+    vacancy_applications_router,
+)
 
 # ── Rate limiter ──────────────────────────────────────────────────
 limiter = Limiter(
@@ -27,6 +31,13 @@ limiter = Limiter(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown hooks."""
+    # Guard: refuse to start with a weak or missing JWT secret
+    if not settings.JWT_SECRET or settings.JWT_SECRET == "CHANGE_ME":
+        raise RuntimeError(
+            "CRITICAL: JWT_SECRET is not set or is the insecure default ('CHANGE_ME'). "
+            "Generate a strong secret (e.g. `openssl rand -hex 32`) and set it "
+            "via the JWT_SECRET environment variable or .env file."
+        )
     yield
 
 
@@ -56,6 +67,8 @@ def create_app() -> FastAPI:
     app.include_router(vacancies_router)
     app.include_router(geo_router)
     app.include_router(auth_router)
+    app.include_router(applications_router)
+    app.include_router(vacancy_applications_router)
 
     return app
 
