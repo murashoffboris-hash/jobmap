@@ -5,6 +5,7 @@ import App from "./App";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./styles/global.css";
 import { initTheme } from "@/store/theme";
+import { registerSW } from "@/pwa";
 
 // Применяем тему до первого рендера, чтобы избежать вспышки неверной темы.
 initTheme();
@@ -22,12 +23,9 @@ ReactDOM.createRoot(rootEl).render(
   </React.StrictMode>,
 );
 
-// Регистрация service worker — vite-plugin-pwa подхватывает автоматически,
-// но добавляем явный fallback на /sw.js на случай отключённого PWA-плагина.
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js")
-      .catch((err) => console.warn("[JobMap] SW fallback register failed:", err));
-  });
+// Регистрация service worker через vite-plugin-pwa (Workbox).
+// В DEV-режиме виртуальный модуль возвращает no-op — здесь вызов безвреден,
+// но оборачиваем в проверку `window`, чтобы код был совместим с SSR-окружением.
+if (typeof window !== "undefined") {
+  registerSW();
 }

@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // vitest не понимает виртуальные модули Vite — подменяем пустой заглушкой.
+      "virtual:pwa-register": path.resolve(__dirname, "./src/test/pwa-register-stub.ts"),
     },
   },
   test: {

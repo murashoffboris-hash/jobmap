@@ -11,6 +11,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // Разрешаем фолбэк для SPA-навигации: при офлайне по любому маршруту отдаём index.html.
+      navigateFallback: "/index.html",
+      navigateFallbackDenylist: [/^\/api\//, /^\/sw\.js$/, /^\/workbox-/, /\.json$/],
       includeAssets: ["favicon.ico"],
       manifest: {
         name: "JobMap",
@@ -20,6 +23,7 @@ export default defineConfig({
         background_color: "#0f172a",
         display: "standalone",
         start_url: "/",
+        lang: "ru",
         icons: [
           {
             src: "favicon.ico",
@@ -30,7 +34,81 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        navigateFallback: "/index.html",
+        // Управляем кэшем вручную через runtimeCaching — никаких дефолтных precache-переопределений.
+        cleanupOutdatedCaches: true,
+        // В проде Workbox пишет полезный лог, в dev — нет.
+        // eslint-disable-next-line no-console
+        ...(process.env.NODE_ENV === "production" ? {} : { suppressWarnings: false }),
+        runtimeCaching: [
+          {
+            // GET /api/vacancies* — network-first с fallback в cache, TTL ~1 час.
+            urlPattern: ({ url, request }) =>
+              request.method === "GET" && url.pathname.includes("/api/") && url.pathname.includes("/vacancies"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "jobmap-api-vacancies",
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60, // 1 час
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Прочие GET к /api/* (например, /auth/me) — network-first, без долгого хранения.
+            urlPattern: ({ url, request }) =>
+              request.method === "GET" && url.pathname.includes("/api/") && !url.pathname.includes("/vacancies"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "jobmap-api-other",
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 5, // 5 минут
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // POST/PATCH/PUT/DELETE на /api/* — network-only (никаких устаревших мутаций).
+            urlPattern: ({ url, request }) =>
+              request.method !== "GET" && url.pathname.includes("/api/"),
+            handler: "NetworkOnly",
+            options: {
+              cacheName: "jobmap-api-mutations",
+            },
+          },
+          {
+            // Тайлы карты CartoDB — cache-first, лимит ~50 MB с expiration.
+            urlPattern: ({ url }) => url.hostname.endsWith("basemaps.cartocdn.com"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "jobmap-map-tiles",
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 дней
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Прочие статические ассеты (CDN-шрифты, изображения) — stale-while-revalidate.
+            urlPattern: ({ request }) =>
+              request.destination === "image" ||
+              request.destination === "font" ||
+              request.destination === "style",
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "jobmap-static-assets",
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],

@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Header from "@/components/Header";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import OfflineBanner from "@/components/OfflineBanner";
+import ReloadPrompt from "@/components/ReloadPrompt";
 import HomePage from "@/pages/HomePage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
@@ -13,6 +15,9 @@ export default function App(): JSX.Element {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
+      {/* Баннеры висят под sticky-хедером (top-16) — см. компоненты. */}
+      <OfflineBanner />
+      <ReloadPrompt />
       <main className="flex flex-1 flex-col">
         <Routes>
           <Route path="/" element={<HomePage />} />
