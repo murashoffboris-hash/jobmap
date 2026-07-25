@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -25,6 +25,13 @@ from app.services.auth import (
     get_current_user,
 )
 from app.services.security import hash_password, verify_password
+from app.services.storage import (
+    delete_avatar,
+    ensure_bucket_exists,
+    get_avatar_presigned_url,
+    upload_avatar,
+    validate_avatar,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -155,6 +162,120 @@ async def update_me(
         phone=profile.phone,
         bio=profile.bio,
         avatar_url=profile.avatar_url,
+        role=current_user.role,
+        is_active=current_user.is_active,
+    )
+
+
+# ── Avatar endpoints ──
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_me_avatar(
+    file: UploadFile,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Upload an avatar image (multipart/form-data, field name 'file').
+
+    Allowed formats: JPEG, PNG, WebP. Max size: 5 MB.
+    Content is validated by magic bytes (not by extension).
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    # Read file content
+    content = await file.read()
+
+    # Validate content
+    try:
+        content_type = validate_avatar(content)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    # Determine extension from detected MIME type
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+    ext = ext_map[content_type]
+
+    # Ensure bucket exists
+    await ensure_bucket_exists()
+
+    # Upload to MinIO
+    key = await upload_avatar(current_user.id, content, ext)
+
+    # Update profile
+    profile_result = await session.execute(
+        select(Profile).where(Profile.user_id == current_user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if profile is None:
+        profile = Profile(user_id=current_user.id)
+        session.add(profile)
+        await session.flush()
+
+    profile.avatar_url = key
+    await session.commit()
+    await session.refresh(profile)
+
+    presigned = await get_avatar_presigned_url(key)
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=profile.full_name,
+        phone=profile.phone,
+        bio=profile.bio,
+        avatar_url=presigned or key,
+        role=current_user.role,
+        is_active=current_user.is_active,
+    )
+
+
+@router.get("/me/avatar")
+async def get_me_avatar(
+    current_user: User = Depends(get_current_user),
+):
+    """Redirect to a presigned URL for the current user's avatar.
+
+    If no avatar is set, returns 404.
+    Uses presigned URL (backend does NOT proxy the image bytes).
+    """
+    if not current_user.profile or not current_user.profile.avatar_url:
+        raise HTTPException(status_code=404, detail="No avatar set")
+
+    presigned = await get_avatar_presigned_url(current_user.profile.avatar_url)
+    if not presigned:
+        raise HTTPException(status_code=404, detail="Avatar file not found")
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url=presigned, status_code=307)
+
+
+@router.delete("/me/avatar", response_model=UserResponse)
+async def delete_me_avatar(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete the current user's avatar from storage and clear the field."""
+    profile_result = await session.execute(
+        select(Profile).where(Profile.user_id == current_user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if profile and profile.avatar_url:
+        await delete_avatar(profile.avatar_url)
+        profile.avatar_url = None
+        await session.commit()
+        await session.refresh(profile)
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=profile.full_name if profile else None,
+        phone=profile.phone if profile else None,
+        bio=profile.bio if profile else None,
+        avatar_url=None,
         role=current_user.role,
         is_active=current_user.is_active,
     )
