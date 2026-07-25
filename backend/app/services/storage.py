@@ -12,6 +12,7 @@ from typing import Optional
 import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
+from PIL import Image
 
 from app.config import settings
 
@@ -20,6 +21,12 @@ ALLOWED_IMAGE_TYPES: frozenset[str] = frozenset(
     {"image/jpeg", "image/png", "image/webp"}
 )
 MAX_AVATAR_SIZE: int = 5 * 1024 * 1024  # 5 MB
+
+# ── Decompression bomb protection ──
+# Pillow will raise DecompressionBombError if an image exceeds this many pixels
+# during decompression. 50M pixels ≈ 7071×7071 — more than enough for an avatar.
+MAX_IMAGE_PIXELS: int = 50_000_000
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 # ── Magic bytes for image type detection ──
 _MAGIC_SIGNATURES: dict[bytes, str] = {
@@ -63,7 +70,8 @@ def validate_avatar(content: bytes, *, max_size: int = MAX_AVATAR_SIZE) -> str:
         Detected MIME type string (e.g. 'image/jpeg').
 
     Raises:
-        ValueError: If content exceeds max_size or is not a recognized image.
+        ValueError: If content exceeds max_size, is not a recognized image,
+            or fails decompression bomb / integrity checks.
     """
     if len(content) > max_size:
         raise ValueError(
@@ -76,7 +84,51 @@ def validate_avatar(content: bytes, *, max_size: int = MAX_AVATAR_SIZE) -> str:
             f"Unsupported image type. Allowed: {', '.join(sorted(ALLOWED_IMAGE_TYPES))}"
         )
 
+    # ── Decompression bomb & integrity protection ──
+    _validate_image_integrity(content)
+
     return content_type
+
+
+def _validate_image_integrity(content: bytes) -> None:
+    """Validate that the image is not a decompression bomb and has a valid structure.
+
+    Uses Pillow to:
+      1. Verify the image file structure (header integrity, truncated files).
+      2. Check that decompressed pixel count is within safe bounds.
+
+    Raises:
+        ValueError: If the image is corrupted, truncated, or exceeds pixel limits.
+    """
+    try:
+        # Open the image (lazy — only parses headers, no full decompression)
+        img = Image.open(BytesIO(content))
+
+        # Check dimensions from the header BEFORE verify() (which invalidates
+        # the image object). This catches decompression bombs where the header
+        # claims a reasonable size but verify() would later decompress to
+        # something huge — Pillow's MAX_IMAGE_PIXELS handles that case.
+        pixel_count = img.width * img.height
+        if pixel_count > MAX_IMAGE_PIXELS:
+            raise ValueError(
+                f"Image too large after decompression: {pixel_count} pixels "
+                f"(max {MAX_IMAGE_PIXELS})"
+            )
+
+        # verify() checks file structure integrity (corrupted headers,
+        # truncated streams, etc.) without full pixel data decompression
+        img.verify()
+
+    except ValueError:
+        # Re-raise our own ValueError (pixel count exceeded)
+        raise
+    except Image.DecompressionBombError as exc:
+        raise ValueError(
+            f"Image exceeds decompression pixel limit ({MAX_IMAGE_PIXELS}): {exc}"
+        )
+    except Exception as exc:
+        # Any Pillow error (corrupt, truncated, unidentified format, etc.)
+        raise ValueError(f"Invalid or corrupted image: {exc}")
 
 
 def _get_s3_client():

@@ -3,42 +3,39 @@
 from __future__ import annotations
 
 import io
-import struct
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from PIL import Image as PILImage
 
 
 # ── Helpers ──
 
 
 def _make_jpeg_bytes() -> bytes:
-    """Create minimal valid JPEG bytes (SOI marker + minimal data)."""
-    return b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+    """Create a minimal but valid JPEG image using Pillow (1×1 pixel)."""
+    buf = io.BytesIO()
+    img = PILImage.new("RGB", (1, 1), color=(255, 0, 0))
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 def _make_png_bytes() -> bytes:
-    """Create minimal valid PNG bytes."""
-    # PNG signature + IHDR chunk
-    signature = b"\x89PNG\r\n\x1a\n"
-
-    def _chunk(chunk_type: bytes, data: bytes) -> bytes:
-        chunk = chunk_type + data
-        crc = struct.pack(">I", _crc32(chunk))
-        return struct.pack(">I", len(data)) + chunk + crc
-
-    return signature + _chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+    """Create a minimal but valid PNG image using Pillow (1×1 pixel)."""
+    buf = io.BytesIO()
+    img = PILImage.new("RGB", (1, 1), color=(0, 255, 0))
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def _make_webp_bytes() -> bytes:
-    """Create minimal valid WebP bytes (RIFF header + WEBP)."""
-    # RIFF header: "RIFF" + size (little-endian) + "WEBP"
-    riff = b"RIFF"
-    size = struct.pack("<I", 4)  # size of "WEBP"
-    webp_marker = b"WEBP"
-    return riff + size + webp_marker
+    """Create a minimal but valid WebP image using Pillow (1×1 pixel)."""
+    buf = io.BytesIO()
+    img = PILImage.new("RGB", (1, 1), color=(0, 0, 255))
+    img.save(buf, format="WEBP")
+    return buf.getvalue()
 
 
 def _make_pdf_bytes() -> bytes:
@@ -52,23 +49,17 @@ def _make_exe_bytes() -> bytes:
 
 
 def _make_oversized_bytes() -> bytes:
-    """Create > 5MB of JPEG-like bytes."""
-    header = _make_jpeg_bytes()
-    padding = b"\x00" * (5 * 1024 * 1024)  # 5 MB of zeros
-    return header + padding
-
-
-# Pure-Python CRC32 (to avoid zlib import issues in certain envs)
-def _crc32(data: bytes) -> int:
-    crc = 0xFFFFFFFF
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0xEDB88320
-            else:
-                crc >>= 1
-    return crc ^ 0xFFFFFFFF
+    """Create a valid JPEG > 5MB by generating a large image."""
+    # Generate a JPEG > 5MB: create a large enough image (Pillow compresses it)
+    buf = io.BytesIO()
+    img = PILImage.new("RGB", (1500, 1500), color=(128, 128, 128))
+    img.save(buf, format="JPEG", quality=95)
+    result = buf.getvalue()
+    # If not oversized enough, add padding after the JPEG data
+    # (the magic bytes check will still pass since JPEG starts with FF D8 FF)
+    if len(result) <= 5 * 1024 * 1024:
+        result = result + b"\x00" * (5 * 1024 * 1024 - len(result) + 1)
+    return result
 
 
 # ── Tests ──
@@ -217,15 +208,117 @@ class TestValidateAvatar:
     def test_size_exactly_5mb_ok(self):
         from app.services.storage import validate_avatar
 
-        # Create exactly 5 MB of valid JPEG
-        header = _make_jpeg_bytes()
-        padding = b"\x00" * (5 * 1024 * 1024 - len(header))
-        content = header + padding
+        # Create a valid JPEG exactly at the 5 MB boundary
+        # Generate a real JPEG image, pad with trailing zeros to reach 5 MB
+        # (JPEG parsers stop at EOI marker FF D9, ignore trailing data)
+        buf = io.BytesIO()
+        img = PILImage.new("RGB", (1, 1), color=(255, 0, 0))
+        img.save(buf, format="JPEG")
+        jpeg_data = buf.getvalue()
+        padding_needed = 5 * 1024 * 1024 - len(jpeg_data)
+        content = jpeg_data + b"\x00" * padding_needed
         assert len(content) == 5 * 1024 * 1024
+        # JPEG magic bytes pass, Pillow opens it (ignores trailing data),
+        # pixel dimensions are tiny → passes
         assert validate_avatar(content) == "image/jpeg"
 
 
-# ── Integration-style tests with mocked S3 ──
+# ── Decompression bomb & integrity tests ──
+
+from app.services.storage import MAX_IMAGE_PIXELS
+
+
+class TestValidateAvatarSecurity:
+    """Test decompression bomb & image integrity protection."""
+
+    def test_truncated_image_raises(self) -> None:
+        """Truncated JPEG data → should raise ValueError (integrity check)."""
+        from app.services.storage import validate_avatar
+
+        # Valid JPEG header but truncated body
+        truncated = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01"
+        with pytest.raises(ValueError, match="Invalid or corrupted"):
+            validate_avatar(truncated)
+
+    def test_invalid_jpeg_structure_raises(self) -> None:
+        """JPEG magic bytes followed by garbage → should raise ValueError."""
+        from app.services.storage import validate_avatar
+
+        fake_jpeg = _make_jpeg_bytes()[:20] + b"\x00" * 100
+        with pytest.raises(ValueError, match="Invalid or corrupted"):
+            validate_avatar(fake_jpeg)
+
+    def test_dimensions_within_limit_pass(self) -> None:
+        """Normal small images (1×1 PNG) should pass validation."""
+        from app.services.storage import validate_avatar
+
+        assert validate_avatar(_make_png_bytes()) == "image/png"
+
+    def test_max_image_pixels_is_set(self) -> None:
+        """Image.MAX_IMAGE_PIXELS is configured at import time."""
+        from PIL import Image
+
+        assert Image.MAX_IMAGE_PIXELS == MAX_IMAGE_PIXELS
+
+    def test_excessive_pixel_count_raises(self, monkeypatch) -> None:
+        """Image exceeding pixel limit → should raise ValueError.
+
+        Uses monkeypatch to lower the limit to a testable value.
+        """
+        from app.services import storage
+        from app.services.storage import validate_avatar
+
+        # Lower limit to 4 pixels (2×2) for testing
+        monkeypatch.setattr(storage, "MAX_IMAGE_PIXELS", 4)
+
+        # Create a real 3×3 PNG (9 pixels > 4 limit)
+        buf = io.BytesIO()
+        PILImage.new("RGB", (3, 3), color=(128, 0, 0)).save(buf, format="PNG")
+        # Also need to raise Pillow's own limit to not interfere
+        import PIL.Image
+        old_limit = PIL.Image.MAX_IMAGE_PIXELS
+        PIL.Image.MAX_IMAGE_PIXELS = 100
+        try:
+            with pytest.raises(ValueError, match="Image too large after decompression"):
+                validate_avatar(buf.getvalue())
+        finally:
+            PIL.Image.MAX_IMAGE_PIXELS = old_limit
+
+    def test_pixel_count_at_limit_passes(self, monkeypatch) -> None:
+        """Image at exactly the pixel limit should pass.
+
+        Uses monkeypatch to lower the limit to a testable value.
+        """
+        from app.services import storage
+        from app.services.storage import validate_avatar
+
+        # Set limit to 9 pixels (3×3)
+        monkeypatch.setattr(storage, "MAX_IMAGE_PIXELS", 9)
+
+        import PIL.Image
+        old_limit = PIL.Image.MAX_IMAGE_PIXELS
+        PIL.Image.MAX_IMAGE_PIXELS = 100  # so Pillow doesn't raise first
+        try:
+            buf = io.BytesIO()
+            PILImage.new("RGB", (3, 3), color=(128, 0, 0)).save(buf, format="PNG")
+            # 3×3 = 9, exactly at limit
+            assert validate_avatar(buf.getvalue()) == "image/png"
+        finally:
+            PIL.Image.MAX_IMAGE_PIXELS = old_limit
+
+    def test_pillow_decompression_bomb_error_raises(self) -> None:
+        """Pillow's own DecompressionBombError → caught and re-raised as ValueError."""
+        from unittest.mock import patch as mock_patch
+        from PIL import Image
+        from app.services.storage import validate_avatar
+
+        # Use a small valid PNG, but mock Image.open to raise DecompressionBombError
+        png_bytes = _make_png_bytes()
+        with mock_patch("PIL.Image.open", side_effect=Image.DecompressionBombError("bomb!")):
+            with pytest.raises(ValueError, match="Image exceeds decompression pixel limit"):
+                # Import fresh to avoid caching
+                from app.services.storage import _validate_image_integrity
+                _validate_image_integrity(png_bytes)
 
 
 @pytest.mark.asyncio
