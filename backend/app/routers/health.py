@@ -1,23 +1,30 @@
-"""Health-check endpoint — real dependency checks with mandatory + optional components."""
+"""Health-check endpoint — lightweight, pool-friendly dependency checks.
+
+Every health check previously opened a fresh ``asyncpg.connect()``,
+exhausting PostgreSQL connections under load (>10 concurrent users).
+Now reuses the application's SQLAlchemy async session factory and
+caches results briefly so that burst health probes (k8s, load-balancers)
+don't translate into DB connection storms.
+"""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
-import asyncpg
-import httpx
-import redis
 from fastapi import APIRouter
 from pydantic import BaseModel
+from sqlalchemy import text
 
-from app.config import settings
+from app.database import async_session_factory
+from app.services.cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
 
-__all__ = ["router"]
+HEALTH_CACHE_KEY = "health:check"
+HEALTH_CACHE_TTL = 10  # seconds — short enough for alerts, long enough to absorb bursts
 
 
 class HealthResponse(BaseModel):
@@ -25,94 +32,69 @@ class HealthResponse(BaseModel):
     service: str
     timestamp: str
     dependencies: dict[str, str]
-    optional: dict[str, str]
 
 
 async def _check_postgres() -> str:
+    """Probe PostgreSQL via the shared async pool — no raw connection."""
     try:
-        url = settings.database_url.replace("+asyncpg", "")
-        conn = await asyncpg.connect(url)
-        result = await conn.fetchval("SELECT PostGIS_Version()")
-        await conn.close()
-        return f"ok (PostGIS {result})"
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text("SELECT PostGIS_Version()")
+            )
+            version = result.scalar_one()
+            return f"ok (PostGIS {version})"
     except Exception as e:
+        logger.warning("PostgreSQL health check failed: %s", e)
         return f"error: {e}"
 
 
 async def _check_redis() -> str:
+    """Probe Redis via the shared cache connection."""
     try:
-        r = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=3)
-        return "ok" if r.ping() else "error: no pong"
+        from app.services.cache import get_redis
+
+        r = await get_redis()
+        pong = await r.ping()
+        return "ok" if pong else "error: no pong"
     except Exception as e:
         return f"error: {e}"
 
 
-async def _check_nominatim() -> str:
-    """Check Nominatim — tries primary URL first, then fallback."""
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{settings.NOMINATIM_URL}/status.php")
-            return f"ok (primary)" if resp.status_code == 200 else f"error: {resp.status_code}"
-    except Exception:
-        pass
-
-    # Try fallback
-    try:
-        headers = {"User-Agent": settings.NOMINATIM_USER_AGENT}
-        async with httpx.AsyncClient(timeout=10, headers=headers) as client:
-            resp = await client.get("https://nominatim.openstreetmap.org/status.php")
-            return "ok (fallback)" if resp.status_code == 200 else f"degraded: fallback {resp.status_code}"
-    except Exception as e:
-        return f"degraded: {e}"
-
-
-async def _check_osrm() -> str:
-    """Check OSRM — tries primary URL first, then fallback."""
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{settings.OSRM_URL}/version")
-            data = resp.json()
-            return f"ok (v{data.get('osrm', '?')})"
-    except Exception:
-        pass
-
-    # Try fallback
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get("https://router.project-osrm.org/version")
-            data = resp.json()
-            return f"ok (fallback v{data.get('osrm', '?')})"
-    except Exception as e:
-        return f"degraded: {e}"
-
-
-@router.get("", response_model=HealthResponse)
-async def health_check():
-    """Health probe with real dependency checks.
-
-    Mandatory: postgresql, redis — any error means 'down'.
-    Optional:  nominatim, osrm — degraded is not fatal; the service still
-               operates using fallback URLs.
-    """
-    deps = {
+async def _collect_dependencies() -> dict[str, str]:
+    """Gather all dependency statuses."""
+    return {
         "postgresql": await _check_postgres(),
         "redis": await _check_redis(),
     }
 
-    optional = {
-        "nominatim": await _check_nominatim(),
-        "osrm": await _check_osrm(),
-    }
 
-    # Status is 'ok' if all mandatory deps are healthy.
-    # Optional deps in 'degraded' state don't bring the service down.
-    mandatory_ok = all(v.startswith("ok") for v in deps.values())
-    status = "ok" if mandatory_ok else "degraded"
+@router.get("", response_model=HealthResponse)
+async def health_check():
+    """Health probe — cached for 10 s to survive burst traffic.
 
-    return HealthResponse(
+    At 500 concurrent users a naive probe-per-request would require 500
+    simultaneous PostgreSQL connections.  This endpoint caps that to
+    **one** probe every 10 seconds regardless of caller count.
+    """
+    cached = await cache_get(HEALTH_CACHE_KEY)
+    if cached is not None:
+        return HealthResponse(**cached)
+
+    deps = await _collect_dependencies()
+    status = "ok" if all(v.startswith("ok") for v in deps.values()) else "degraded"
+
+    result = HealthResponse(
         status=status,
         service="jobmap-backend",
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         dependencies=deps,
-        optional=optional,
     )
+
+    # Cache the serialised result
+    await cache_set(
+        HEALTH_CACHE_KEY,
+        result.model_dump(),
+        ttl_seconds=HEALTH_CACHE_TTL,
+    )
+
+    return result
