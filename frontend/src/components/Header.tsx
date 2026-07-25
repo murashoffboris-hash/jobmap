@@ -444,7 +444,7 @@ function MenuLink({ to, icon, children, onClick }: MenuLinkProps): JSX.Element {
 
 function roleLabel(role: string): string {
   switch (role) {
-    case "worker":
+    case "user":
       return "Соискатель";
     case "employer":
       return "Работодатель";

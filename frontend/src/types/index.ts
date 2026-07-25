@@ -1,7 +1,9 @@
 // Доменные типы JobMap — отражают backend/app/schemas.py.
 // Держим минимальный набор для MVP-фронта; расширяем по мере роста API.
 
-export type UserRole = "worker" | "employer" | "admin";
+export type UserRole = "user" | "employer" | "admin" | "moderator";
+export type RegistrationRole = "user" | "employer";
+export type RegistrationUiRole = "worker" | "employer";
 
 export interface User {
   id: number;
@@ -36,7 +38,11 @@ export interface RegisterRequest {
   email: string;
   password: string;
   full_name: string;
-  role: UserRole;
+  role: RegistrationRole;
+}
+
+export interface UpdateRoleRequest {
+  role: RegistrationRole;
 }
 
 export type EmploymentType = "full_time" | "part_time" | "contract" | "internship" | "gig";
@@ -64,6 +70,20 @@ export interface VacancyListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface VacancyCreateRequest {
+  title: string;
+  description?: string;
+  category_id?: number;
+  address?: string;
+  salary_from?: number;
+  salary_to?: number;
+  salary_currency?: string;
+  schedule_type?: string;
+  contact_phone?: string;
+  contact_name?: string;
+  exact_location_public?: boolean;
 }
 
 export interface ApiError {

@@ -10,6 +10,7 @@ import VacancyListPage from "@/pages/VacancyListPage";
 import VacancyDetailPage from "@/pages/VacancyDetailPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import ProfilePage from "@/pages/ProfilePage";
+import VacancyCreatePage from "@/pages/VacancyCreatePage";
 
 export default function App(): JSX.Element {
   return (
@@ -24,6 +25,14 @@ export default function App(): JSX.Element {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/vacancies" element={<VacancyListPage />} />
+          <Route
+            path="/vacancies/new"
+            element={
+              <ProtectedRoute>
+                <VacancyCreatePage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/vacancies/:id"
             element={

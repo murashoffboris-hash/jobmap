@@ -9,6 +9,7 @@ import ProfilePage from "./ProfilePage";
 vi.mock("@/api/auth", () => ({
   authApi: {
     updateProfile: vi.fn(),
+    updateRole: vi.fn(),
   },
 }));
 
@@ -19,7 +20,7 @@ const user: User = {
   phone: "+375291234567",
   bio: "Frontend-разработчик",
   avatar_url: null,
-  role: "worker",
+  role: "user",
   is_active: true,
   created_at: "2026-07-23T10:00:00Z",
 };
@@ -113,5 +114,18 @@ describe("ProfilePage", () => {
 
     expect(screen.getByRole("heading", { name: "Иван Петров" })).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Другое имя")).not.toBeInTheDocument();
+  });
+
+  it("переключает роль соискателя на работодателя после подтверждения", async () => {
+    const employer = { ...user, role: "employer" as const };
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(authApi.updateRole).mockResolvedValue(employer);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Стать работодателем" }));
+
+    await waitFor(() => expect(authApi.updateRole).toHaveBeenCalledWith("employer"));
+    expect(await screen.findByText("Роль изменена: Работодатель")).toBeInTheDocument();
+    expect(useAuthStore.getState().user).toEqual(employer);
   });
 });
