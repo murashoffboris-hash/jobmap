@@ -16,16 +16,6 @@ from app.routers.auth import router as auth_router
 from app.routers.geoservices import router as geo_router
 from app.routers.health import router as health_router
 from app.routers.vacancies import router as vacancies_router
-from app.routers.applications import (
-    router as applications_router,
-    vacancy_applications_router,
-)
-
-# ── Rate limiter ──────────────────────────────────────────────────
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["30/minute"],  # generous default for the whole API
-)
 
 
 @asynccontextmanager
@@ -58,6 +48,7 @@ def create_app() -> FastAPI:
     )
 
     # ── Rate limiting ──
+    limiter = Limiter(key_func=get_remote_address)
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
@@ -67,8 +58,6 @@ def create_app() -> FastAPI:
     app.include_router(vacancies_router)
     app.include_router(geo_router)
     app.include_router(auth_router)
-    app.include_router(applications_router)
-    app.include_router(vacancy_applications_router)
 
     return app
 
