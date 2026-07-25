@@ -18,6 +18,18 @@ NOMINATIM_TIMEOUT = 10  # seconds
 NOMINATIM_RETRIES = 3
 
 
+class NominatimError(Exception):
+    """Base exception for Nominatim service errors."""
+
+
+class NominatimServiceError(NominatimError):
+    """Upstream Nominatim service is unavailable or returned an error."""
+
+
+class NominatimNoResults(NominatimError):
+    """Nominatim returned zero results for the query."""
+
+
 async def geocode_address(
     session: AsyncSession,
     address: str,
@@ -86,6 +98,15 @@ async def geocode_address(
             if attempt < NOMINATIM_RETRIES:
                 continue
 
+        except httpx.HTTPStatusError as exc:
+            # Nominatim returned a non-2xx response — do not retry
+            last_error = f"HTTP {exc.response.status_code}: {exc.response.text[:200]}"
+            logger.error(
+                "Nominatim geocoding returned error status %d on attempt %d/%d",
+                exc.response.status_code, attempt, NOMINATIM_RETRIES,
+            )
+            break
+
     # All retries exhausted
     log_entry = GeocodingLog(
         address_raw=address,
@@ -95,11 +116,21 @@ async def geocode_address(
     )
     session.add(log_entry)
     await session.commit()
-    return None
+    raise NominatimServiceError(
+        f"Nominatim geocoding failed after {attempt} attempt(s): {last_error}"
+    )
 
 
-async def reverse_geocode(lat: float, lon: float) -> dict[str, Any] | None:
-    """Reverse geocode coordinates to an address."""
+async def reverse_geocode(lat: float, lon: float) -> dict[str, Any]:
+    """Reverse geocode coordinates to an address.
+
+    Returns:
+        dict with lat, lon, display_name, type etc.
+
+    Raises:
+        NominatimServiceError: if the upstream service is unreachable or returns an error.
+        NominatimNoResults: if no results found for the given coordinates.
+    """
     params = {
         "lat": str(lat),
         "lon": str(lon),
@@ -110,7 +141,45 @@ async def reverse_geocode(lat: float, lon: float) -> dict[str, Any] | None:
         async with httpx.AsyncClient(timeout=NOMINATIM_TIMEOUT) as client:
             resp = await client.get(f"{settings.NOMINATIM_URL}/reverse", params=params)
             resp.raise_for_status()
-            return resp.json()
-    except httpx.HTTPError as exc:
-        logger.error("Nominatim reverse geocoding failed: %s", exc)
-        return None
+            data = resp.json()
+
+            if not data or "error" in data:
+                logger.warning(
+                    "Nominatim reverse geocode returned no results for lat=%s, lon=%s",
+                    lat, lon,
+                )
+                raise NominatimNoResults(
+                    f"No results for coordinates lat={lat}, lon={lon}"
+                )
+
+            return data
+
+    except httpx.TimeoutException as exc:
+        logger.error("Nominatim reverse geocode timed out: %s", exc)
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode timed out after {NOMINATIM_TIMEOUT}s"
+        ) from exc
+
+    except httpx.ConnectError as exc:
+        logger.error("Nominatim reverse geocode connection failed: %s", exc)
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode connection failed: {exc}"
+        ) from exc
+
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "Nominatim reverse geocode returned HTTP %d: %s",
+            exc.response.status_code, exc.response.text[:200],
+        )
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode returned HTTP {exc.response.status_code}"
+        ) from exc
+
+    except NominatimNoResults:
+        raise
+
+    except Exception as exc:
+        logger.error("Nominatim reverse geocode unexpected error: %s", exc)
+        raise NominatimServiceError(
+            f"Nominatim reverse geocode unexpected error: {exc}"
+        ) from exc
