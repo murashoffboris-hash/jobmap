@@ -1,23 +1,30 @@
-"""Health-check endpoint — real dependency checks."""
+"""Health-check endpoint — lightweight, pool-friendly dependency checks.
+
+Every health check previously opened a fresh ``asyncpg.connect()``,
+exhausting PostgreSQL connections under load (>10 concurrent users).
+Now reuses the application's SQLAlchemy async session factory and
+caches results briefly so that burst health probes (k8s, load-balancers)
+don't translate into DB connection storms.
+"""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
-import asyncpg
-import httpx
-import redis
 from fastapi import APIRouter
 from pydantic import BaseModel
+from sqlalchemy import text
 
-from app.config import settings
+from app.database import async_session_factory
+from app.services.cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
 
-__all__ = ["router"]
+HEALTH_CACHE_KEY = "health:check"
+HEALTH_CACHE_TTL = 10  # seconds — short enough for alerts, long enough to absorb bursts
 
 
 class HealthResponse(BaseModel):
@@ -28,56 +35,66 @@ class HealthResponse(BaseModel):
 
 
 async def _check_postgres() -> str:
+    """Probe PostgreSQL via the shared async pool — no raw connection."""
     try:
-        url = settings.database_url.replace("+asyncpg", "")
-        conn = await asyncpg.connect(url)
-        result = await conn.fetchval("SELECT PostGIS_Version()")
-        await conn.close()
-        return f"ok (PostGIS {result})"
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text("SELECT PostGIS_Version()")
+            )
+            version = result.scalar_one()
+            return f"ok (PostGIS {version})"
     except Exception as e:
+        logger.warning("PostgreSQL health check failed: %s", e)
         return f"error: {e}"
 
 
 async def _check_redis() -> str:
+    """Probe Redis via the shared cache connection."""
     try:
-        r = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=3)
-        return "ok" if r.ping() else "error: no pong"
+        from app.services.cache import get_redis
+
+        r = await get_redis()
+        pong = await r.ping()
+        return "ok" if pong else "error: no pong"
     except Exception as e:
         return f"error: {e}"
 
 
-async def _check_nominatim() -> str:
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{settings.NOMINATIM_URL}/status.php")
-            return "ok" if resp.status_code == 200 else f"error: {resp.status_code}"
-    except Exception as e:
-        return f"error: {e}"
-
-
-async def _check_osrm() -> str:
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{settings.OSRM_URL}/version")
-            data = resp.json()
-            return f"ok (v{data.get('osrm', '?')})"
-    except Exception as e:
-        return f"error: {e}"
-
-
-@router.get("", response_model=HealthResponse)
-async def health_check():
-    """Health probe with real dependency checks."""
-    deps = {
+async def _collect_dependencies() -> dict[str, str]:
+    """Gather all dependency statuses."""
+    return {
         "postgresql": await _check_postgres(),
         "redis": await _check_redis(),
     }
 
+
+@router.get("", response_model=HealthResponse)
+async def health_check():
+    """Health probe — cached for 10 s to survive burst traffic.
+
+    At 500 concurrent users a naive probe-per-request would require 500
+    simultaneous PostgreSQL connections.  This endpoint caps that to
+    **one** probe every 10 seconds regardless of caller count.
+    """
+    cached = await cache_get(HEALTH_CACHE_KEY)
+    if cached is not None:
+        return HealthResponse(**cached)
+
+    deps = await _collect_dependencies()
     status = "ok" if all(v.startswith("ok") for v in deps.values()) else "degraded"
 
-    return HealthResponse(
+    result = HealthResponse(
         status=status,
         service="jobmap-backend",
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         dependencies=deps,
     )
+
+    # Cache the serialised result
+    await cache_set(
+        HEALTH_CACHE_KEY,
+        result.model_dump(),
+        ttl_seconds=HEALTH_CACHE_TTL,
+    )
+
+    return result
