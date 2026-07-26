@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import { Mail, Lock, User as UserIcon, AlertCircle, UserPlus, Briefcase, Search } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { extractApiError } from "@/api/client";
-import type { UserRole } from "@/types";
+import { toRegistrationRole } from "@/api/auth";
+import type { RegistrationUiRole } from "@/types";
 import AuthShell from "@/components/AuthShell";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -21,7 +22,7 @@ export default function RegisterPage(): JSX.Element {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [role, setRole] = useState<Exclude<UserRole, "admin">>("worker");
+  const [role, setRole] = useState<RegistrationUiRole>("worker");
 
   const [nameError, setNameError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -84,8 +85,16 @@ export default function RegisterPage(): JSX.Element {
         email: email.trim(),
         password,
         full_name: name.trim(),
-        role,
+        role: toRegistrationRole(role),
       });
+      const registeredUser = useAuthStore.getState().user;
+      const expectedRole = toRegistrationRole(role);
+      if (registeredUser?.role !== expectedRole) {
+        setFormError(
+          "Аккаунт создан, но сервер не сохранил выбранную роль. Проверьте роль в профиле перед продолжением.",
+        );
+        return;
+      }
       navigate("/", { replace: true });
     } catch (err) {
       setFormError(extractApiError(err) || "Не удалось зарегистрироваться");

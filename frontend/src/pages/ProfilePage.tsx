@@ -8,6 +8,7 @@ import {
   Mail,
   Phone,
   Save,
+  ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
@@ -18,7 +19,7 @@ import AuthShell from "@/components/AuthShell";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import { useAuthStore } from "@/store/auth";
-import type { UpdateProfileRequest, User } from "@/types";
+import type { RegistrationRole, UpdateProfileRequest, User } from "@/types";
 
 interface ProfileForm {
   full_name: string;
@@ -58,6 +59,7 @@ export default function ProfilePage(): JSX.Element {
   const [errors, setErrors] = useState<FormErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [roleSaving, setRoleSaving] = useState(false);
 
   if (!user) {
     return (
@@ -76,6 +78,7 @@ export default function ProfilePage(): JSX.Element {
       errors={errors}
       formError={formError}
       successMessage={successMessage}
+      roleSaving={roleSaving}
       setForm={setForm}
       onEdit={() => {
         setForm(formFromUser(user));
@@ -118,6 +121,28 @@ export default function ProfilePage(): JSX.Element {
           setSaving(false);
         }
       }}
+      onRoleChange={async (role) => {
+        if (role === user.role) return;
+        const confirmed = window.confirm(
+          role === "employer"
+            ? "Переключиться на роль работодателя? Вы сможете создавать вакансии."
+            : "Переключиться на роль соискателя?",
+        );
+        if (!confirmed) return;
+
+        setRoleSaving(true);
+        setFormError(null);
+        setSuccessMessage(null);
+        try {
+          const updatedUser = await authApi.updateRole(role);
+          updateUser(updatedUser);
+          setSuccessMessage(`Роль изменена: ${roleLabel(updatedUser.role)}`);
+        } catch (error) {
+          setFormError(extractApiError(error) || "Не удалось изменить роль");
+        } finally {
+          setRoleSaving(false);
+        }
+      }}
     />
   );
 }
@@ -153,10 +178,12 @@ interface ProfileContentProps {
   errors: FormErrors;
   formError: string | null;
   successMessage: string | null;
+  roleSaving: boolean;
   setForm: React.Dispatch<React.SetStateAction<ProfileForm>>;
   onEdit: () => void;
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onRoleChange: (role: RegistrationRole) => Promise<void>;
 }
 
 function ProfileContent({
@@ -167,10 +194,12 @@ function ProfileContent({
   errors,
   formError,
   successMessage,
+  roleSaving,
   setForm,
   onEdit,
   onCancel,
   onSubmit,
+  onRoleChange,
 }: ProfileContentProps): JSX.Element {
   const displayName = user.full_name?.trim() || user.email.split("@")[0] || "Пользователь";
 
@@ -308,6 +337,30 @@ function ProfileContent({
               muted={!user.bio?.trim()}
               multiline
             />
+            {(user.role === "user" || user.role === "employer") && (
+              <div className="rounded-xl border border-ink-200/70 bg-ink-50/70 px-4 py-3 dark:border-ink-800 dark:bg-ink-950/30">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
+                  <ShieldCheck size={17} className="text-brand-600 dark:text-brand-300" aria-hidden="true" />
+                  <span>Роль аккаунта</span>
+                </div>
+                <p className="mt-1.5 text-sm text-ink-700 dark:text-ink-200">
+                  {user.role === "employer"
+                    ? "Вы можете публиковать вакансии."
+                    : "Переключитесь на работодателя, чтобы публиковать вакансии."}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  fullWidth
+                  loading={roleSaving}
+                  disabled={roleSaving}
+                  onClick={() => onRoleChange(user.role === "employer" ? "user" : "employer")}
+                  className="mt-3"
+                >
+                  {user.role === "employer" ? "Стать соискателем" : "Стать работодателем"}
+                </Button>
+              </div>
+            )}
             <Button
               variant="primary"
               size="lg"
@@ -353,12 +406,14 @@ function ProfileField({ icon, label, value, muted = false, multiline = false }: 
 
 function roleLabel(role: User["role"]): string {
   switch (role) {
-    case "worker":
+    case "user":
       return "Соискатель";
     case "employer":
       return "Работодатель";
     case "admin":
       return "Администратор";
+    case "moderator":
+      return "Модератор";
     default:
       return role;
   }
