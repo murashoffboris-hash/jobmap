@@ -6,6 +6,7 @@ import {
   Map as MapIcon,
   Menu,
   Moon,
+  PlusCircle,
   Sun,
   User as UserIcon,
   Briefcase,
@@ -105,6 +106,11 @@ export default function Header(): JSX.Element {
           <HeaderNavLink to="/vacancies" icon={<Briefcase size={16} />}>
             Вакансии
           </HeaderNavLink>
+          {user && (user.role === "employer" || user.role === "admin") && (
+            <HeaderNavLink to="/vacancies/new" icon={<PlusCircle size={16} />}>
+              Создать
+            </HeaderNavLink>
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -215,6 +221,11 @@ export default function Header(): JSX.Element {
                     <MobileNavLink to="/vacancies?mine=1" icon={<Briefcase size={16} />} onClick={() => setMobileOpen(false)}>
                       Мои вакансии
                     </MobileNavLink>
+                    {(user.role === "employer" || user.role === "admin") && (
+                      <MobileNavLink to="/vacancies/new" icon={<PlusCircle size={16} />} onClick={() => setMobileOpen(false)}>
+                        Создать вакансию
+                      </MobileNavLink>
+                    )}
                   </>
                 )}
               </nav>
@@ -395,6 +406,11 @@ const UserMenu = forwardRef<HTMLDivElement, UserMenuProps>(function UserMenu(
             <MenuLink to="/vacancies?mine=1" icon={<Briefcase size={16} />} onClick={onClose}>
               Мои вакансии
             </MenuLink>
+            {(role === "employer" || role === "admin") && (
+              <MenuLink to="/vacancies/new" icon={<PlusCircle size={16} />} onClick={onClose}>
+                Создать вакансию
+              </MenuLink>
+            )}
 
             <button
               type="button"

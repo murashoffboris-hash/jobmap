@@ -99,3 +99,34 @@ export interface MapPoint {
   title: string;
   payload?: Record<string, unknown>;
 }
+
+export interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+}
+
+export interface GeocodeResult {
+  lat: number | null;
+  lon: number | null;
+  osm_id: string | null;
+  display_name: string | null;
+  type: string | null;
+}
+
+export interface VacancyFormData {
+  title: string;
+  description: string;
+  category_id: number | null;
+  address: string;
+  salary_from: string;
+  salary_to: string;
+  salary_currency: string;
+  schedule_type: string;
+  contact_name: string;
+  contact_phone: string;
+  exact_location_public: boolean;
+  lat: number | null;
+  lng: number | null;
+}
