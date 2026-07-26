@@ -8,6 +8,7 @@ import {
   Phone,
   User,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 import { extractApiError } from "@/api/client";
 import {
@@ -57,12 +58,31 @@ export default function VacancyCreatePage(): JSX.Element {
   const navigate = useNavigate();
   const [form, setForm] = useState<VacancyFormData>(DEFAULT_FORM);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
 
+  const loadCategories = () => {
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    categoriesApi
+      .list()
+      .then((cats) => {
+        setCategories(cats);
+        setCategoriesError(null);
+      })
+      .catch((err) => {
+        setCategories([]);
+        const msg = extractApiError(err);
+        setCategoriesError(msg || "Не удалось загрузить категории");
+      })
+      .finally(() => setCategoriesLoading(false));
+  };
+
   useEffect(() => {
-    categoriesApi.list().then(setCategories).catch(() => setCategories([]));
+    loadCategories();
   }, []);
 
   function updateField<K extends keyof VacancyFormData>(key: K, value: VacancyFormData[K]) {
@@ -101,6 +121,10 @@ export default function VacancyCreatePage(): JSX.Element {
     return errors;
   }
 
+  function isAddressEmpty(): boolean {
+    return form.address.trim().length === 0 && form.lat == null && form.lng == null;
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const errors = validate();
@@ -108,6 +132,15 @@ export default function VacancyCreatePage(): JSX.Element {
       setFieldErrors(errors);
       return;
     }
+
+    // Если адрес не заполнен — confirm-диалог
+    if (isAddressEmpty()) {
+      const confirmed = window.confirm(
+        "Без адреса вакансия не появится на карте. Продолжить?"
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     setError(null);
     setFieldErrors([]);
@@ -129,13 +162,18 @@ export default function VacancyCreatePage(): JSX.Element {
       });
       navigate(`/vacancies/${vacancy.id}`);
     } catch (caught) {
-      const err = caught instanceof Error ? caught : new Error(extractApiError(caught));
-      // Try to parse field-level errors from 422 response
+      // Сохраняем специальный тип ошибки для EmployerRoleRequiredError
+      if (caught instanceof EmployerRoleRequiredError) {
+        setError(caught);
+        setSaving(false);
+        return;
+      }
+      // Пытаемся распарсить field-level ошибки из 422
       if (
         caught &&
         typeof caught === "object" &&
         "response" in caught &&
-        (caught as { response?: { status?: number; data?: { fields?: Record<string, string> } } }).response?.status === 422
+        (caught as { response?: { status?: number; data?: { detail?: string; fields?: Record<string, string> } } }).response?.status === 422
       ) {
         const fields = (caught as { response?: { data?: { fields?: Record<string, string> } } }).response?.data?.fields;
         if (fields) {
@@ -146,7 +184,9 @@ export default function VacancyCreatePage(): JSX.Element {
           return;
         }
       }
-      setError(err);
+      // Показываем текст ошибки от сервера пользователю
+      const message = extractApiError(caught);
+      setError(new Error(message));
     } finally {
       setSaving(false);
     }
@@ -188,7 +228,37 @@ export default function VacancyCreatePage(): JSX.Element {
             <Tag size={12} className="inline mr-1" />
             Категория
           </label>
-          {categories.length > 0 ? (
+          {categoriesLoading ? (
+            <div className="flex items-center gap-2 text-sm text-ink-500 py-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-300 border-t-brand-500" />
+              Загрузка категорий...
+            </div>
+          ) : categoriesError ? (
+            <div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{categoriesError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadCategories}
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 underline"
+                >
+                  <RefreshCw size={12} />
+                  Повторить загрузку
+                </button>
+              </div>
+              <div className="mt-2">
+                <Input
+                  type="number"
+                  placeholder="ID категории (опционально)"
+                  value={form.category_id ?? ""}
+                  onChange={(e) => updateField("category_id", e.target.value ? Number(e.target.value) : null)}
+                />
+              </div>
+            </div>
+          ) : categories.length > 0 ? (
             <select
               id="vacancy-category"
               className="input"
@@ -201,25 +271,23 @@ export default function VacancyCreatePage(): JSX.Element {
               ))}
             </select>
           ) : (
-            <Input
-              type="number"
-              placeholder="ID категории (опционально)"
-              value={form.category_id ?? ""}
-              onChange={(e) => updateField("category_id", e.target.value ? Number(e.target.value) : null)}
-            />
+            <p className="text-sm text-ink-500 py-2">Нет доступных категорий</p>
           )}
         </div>
 
         {/* Адрес + карта */}
         <div className="space-y-2">
           <label className="label">
-            Адрес места работы
+            Адрес места работы (обязательно для карты)
           </label>
           <AddressAutocomplete
             value={form.address}
             onChange={handleAddressChange}
             error={getFieldError("address")}
           />
+          <p className="text-xs text-ink-500 -mt-1">
+            Укажите адрес, чтобы вакансия отображалась на карте. Можно ввести вручную или кликнуть по карте ниже.
+          </p>
           <div className="rounded-xl overflow-hidden">
             <MapPicker
               lat={form.lat}
