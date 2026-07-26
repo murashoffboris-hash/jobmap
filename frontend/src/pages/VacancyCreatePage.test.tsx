@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { EmployerRoleRequiredError, vacanciesApi } from "@/api/vacancies";
 import { categoriesApi } from "@/api/categories";
@@ -53,9 +53,16 @@ vi.mock("@/api/geo", () => ({
   },
 }));
 
+// jsdom не реализует window.confirm — мокаем глобально
+beforeAll(() => {
+  vi.stubGlobal("confirm", vi.fn(() => true));
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // Возвращаем confirm по умолчанию (true)
+  vi.mocked(window.confirm).mockReturnValue(true);
 });
 
 async function renderPage() {
@@ -74,8 +81,13 @@ describe("VacancyCreatePage", () => {
   it("рендерит форму со всеми полями", async () => {
     await renderPage();
     expect(screen.getByLabelText("Название вакансии *")).toBeInTheDocument();
-    expect(screen.getByLabelText("Адрес места работы")).toBeInTheDocument();
+    expect(screen.getByText("Адрес места работы (обязательно для карты)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Опубликовать вакансию" })).toBeInTheDocument();
+  });
+
+  it("показывает hint под полем адреса", async () => {
+    await renderPage();
+    expect(screen.getByText(/Укажите адрес, чтобы вакансия отображалась на карте/)).toBeInTheDocument();
   });
 
   it("кнопка отправки заблокирована при коротком названии", async () => {
@@ -84,7 +96,7 @@ describe("VacancyCreatePage", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("отправляет форму с минимальными данными", async () => {
+  it("отправляет форму с минимальными данными (с confirm-диалогом)", async () => {
     vi.mocked(vacanciesApi.create).mockResolvedValue({
       id: 1, title: "Test", description: null, status: "active",
       address_normalized: null, location_lat: null, location_lon: null,
@@ -100,6 +112,12 @@ describe("VacancyCreatePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Опубликовать вакансию" }));
 
     await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith(
+        "Без адреса вакансия не появится на карте. Продолжить?"
+      );
+    });
+
+    await waitFor(() => {
       expect(vacanciesApi.create).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Frontend-разработчик",
@@ -109,12 +127,28 @@ describe("VacancyCreatePage", () => {
     });
   });
 
+  it("не отправляет форму если пользователь отказался в confirm-диалоге", async () => {
+    vi.mocked(vacanciesApi.create).mockResolvedValue({ id: 1 } as never);
+    vi.mocked(window.confirm).mockReturnValue(false);
+
+    await renderPage();
+    fireEvent.change(screen.getByLabelText("Название вакансии *"), {
+      target: { value: "Frontend-разработчик" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать вакансию" }));
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalled();
+    });
+    expect(vacanciesApi.create).not.toHaveBeenCalled();
+  });
+
   it("отправляет все поля формы", async () => {
     vi.mocked(vacanciesApi.create).mockResolvedValue({
       id: 2, title: "Developer", description: "Desc", status: "active",
       address_normalized: "Минск", location_lat: 53.9, location_lon: 27.56,
       geocode_status: "success", salary_from: 1000, salary_to: 3000,
-      salary_currency: "USD", schedule_type: "full_time", contact_phone: "+375291234567",
+      salary_currency: "USD", schedule_type: "full_time", contact_phone: "+375****4567",
       exact_location_public: true, created_at: "2025-01-01T00:00:00Z",
     } as never);
 
@@ -199,7 +233,7 @@ describe("VacancyCreatePage", () => {
     expect(vacanciesApi.create).not.toHaveBeenCalled();
   });
 
-  it("обрабатывает API ошибку (не 403)", async () => {
+  it("обрабатывает API ошибку и показывает сообщение", async () => {
     vi.mocked(vacanciesApi.create).mockRejectedValue(new Error("Серверная ошибка"));
     await renderPage();
 
@@ -209,5 +243,44 @@ describe("VacancyCreatePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Опубликовать вакансию" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Серверная ошибка");
+  });
+
+  it("показывает ошибку загрузки категорий и кнопку retry", async () => {
+    vi.mocked(categoriesApi.list).mockRejectedValue(new Error("Network Error"));
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Network Error/)).toBeInTheDocument();
+    });
+    expect(screen.getByText("Повторить загрузку")).toBeInTheDocument();
+  });
+
+  it("повторяет загрузку категорий по кнопке retry", async () => {
+    vi.mocked(categoriesApi.list)
+      .mockRejectedValueOnce(new Error("Network Error"))
+      .mockResolvedValueOnce([{ id: 1, name: "IT", slug: "it", parent_id: null }]);
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Network Error/)).toBeInTheDocument();
+    });
+
+    // Нажимаем retry
+    fireEvent.click(screen.getByText("Повторить загрузку"));
+
+    await waitFor(() => {
+      expect(screen.getByText("IT")).toBeInTheDocument();
+    });
+  });
+
+  it("показывает loading при загрузке категорий", async () => {
+    // Не резолвим промис — оставляем в состоянии loading
+    vi.mocked(categoriesApi.list).mockReturnValue(new Promise(() => {}));
+
+    await renderPage();
+
+    expect(screen.getByText("Загрузка категорий...")).toBeInTheDocument();
   });
 });
