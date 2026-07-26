@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { EmployerRoleRequiredError, vacanciesApi } from "@/api/vacancies";
@@ -58,24 +58,28 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPage() {
-  return render(
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <VacancyCreatePage />
-    </MemoryRouter>,
-  );
+async function renderPage() {
+  let result: ReturnType<typeof render>;
+  await act(async () => {
+    result = render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <VacancyCreatePage />
+      </MemoryRouter>,
+    );
+  });
+  return result!;
 }
 
 describe("VacancyCreatePage", () => {
-  it("рендерит форму со всеми полями", () => {
-    renderPage();
+  it("рендерит форму со всеми полями", async () => {
+    await renderPage();
     expect(screen.getByLabelText("Название вакансии *")).toBeInTheDocument();
     expect(screen.getByLabelText("Адрес места работы")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Опубликовать вакансию" })).toBeInTheDocument();
   });
 
-  it("кнопка отправки заблокирована при коротком названии", () => {
-    renderPage();
+  it("кнопка отправки заблокирована при коротком названии", async () => {
+    await renderPage();
     const btn = screen.getByRole("button", { name: "Опубликовать вакансию" });
     expect(btn).toBeDisabled();
   });
@@ -89,7 +93,7 @@ describe("VacancyCreatePage", () => {
       exact_location_public: false, created_at: "2025-01-01T00:00:00Z",
     } as never);
 
-    renderPage();
+    await renderPage();
     fireEvent.change(screen.getByLabelText("Название вакансии *"), {
       target: { value: "Frontend-разработчик" },
     });
@@ -118,7 +122,7 @@ describe("VacancyCreatePage", () => {
       { id: 1, name: "IT", slug: "it", parent_id: null },
     ]);
 
-    renderPage();
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("Название вакансии *"), {
       target: { value: "Developer" },
@@ -143,7 +147,7 @@ describe("VacancyCreatePage", () => {
 
   it("при 403 показывает объяснение и ссылку на смену роли", async () => {
     vi.mocked(vacanciesApi.create).mockRejectedValue(new EmployerRoleRequiredError());
-    renderPage();
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("Название вакансии *"), {
       target: { value: "Frontend-разработчик" },
@@ -161,7 +165,7 @@ describe("VacancyCreatePage", () => {
 
   it("валидирует salary_from > salary_to", async () => {
     vi.mocked(vacanciesApi.create).mockResolvedValue({ id: 1 } as never);
-    renderPage();
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("Название вакансии *"), {
       target: { value: "Тестовая вакансия" },
@@ -181,7 +185,7 @@ describe("VacancyCreatePage", () => {
 
   it("кнопка отправки заблокирована при коротком названии (меньше 3 символов)", async () => {
     vi.mocked(vacanciesApi.create).mockResolvedValue({ id: 1 } as never);
-    renderPage();
+    await renderPage();
 
     // Вводим 2 символа — кнопка должна быть заблокирована
     fireEvent.change(screen.getByLabelText("Название вакансии *"), {
@@ -197,7 +201,7 @@ describe("VacancyCreatePage", () => {
 
   it("обрабатывает API ошибку (не 403)", async () => {
     vi.mocked(vacanciesApi.create).mockRejectedValue(new Error("Серверная ошибка"));
-    renderPage();
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("Название вакансии *"), {
       target: { value: "Frontend-разработчик" },
