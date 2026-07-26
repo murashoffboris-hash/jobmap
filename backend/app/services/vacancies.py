@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Vacancy, VacancyStatus
 from app.schemas import VacancyCreate, VacancyUpdate, VacancyResponse
-from app.services.nominatim import geocode_address, NominatimServiceError
+from app.services.nominatim import geocode_address
 
 logger = logging.getLogger(__name__)
 
@@ -120,13 +120,7 @@ async def create_vacancy(
 
     if data.address:
         vacancy.address_raw = data.address
-        try:
-            geo = await geocode_address(session, data.address)
-        except NominatimServiceError:
-            logger.warning(
-                "Nominatim unavailable during vacancy creation, proceeding without geocoding"
-            )
-            geo = None
+        geo = await geocode_address(session, data.address)
         if geo:
             _apply_geo(vacancy, geo)
         else:
@@ -151,13 +145,7 @@ async def update_vacancy(
 
     if "address" in update_data and update_data["address"]:
         vacancy.address_raw = update_data.pop("address")
-        try:
-            geo = await geocode_address(session, vacancy.address_raw, vacancy_id=vacancy.id)
-        except NominatimServiceError:
-            logger.warning(
-                "Nominatim unavailable during vacancy update, proceeding without geocoding"
-            )
-            geo = None
+        geo = await geocode_address(session, vacancy.address_raw, vacancy_id=vacancy.id)
         if geo:
             _apply_geo(vacancy, geo)
         else:
