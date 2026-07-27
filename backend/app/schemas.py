@@ -232,6 +232,21 @@ class ApplicationListResponse(BaseModel):
     page: int
     page_size: int
 
+class ApplicationStatusUpdate(BaseModel):
+    """Request body for PATCH /api/applications/{id}/status."""
+    status: str  # "accepted" | "rejected"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        allowed = {"accepted", "rejected"}
+        if value.strip().lower() not in allowed:
+            raise ValueError(
+                f"Status must be one of: {', '.join(sorted(allowed))}"
+            )
+        return value.strip().lower()
+
+
 class ResponseCreate(BaseModel):
     message: Optional[str] = None
 

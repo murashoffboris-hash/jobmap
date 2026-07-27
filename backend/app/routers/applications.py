@@ -15,6 +15,7 @@ from app.schemas import (
     ApplicationCreate,
     ApplicationListResponse,
     ApplicationResponse,
+    ApplicationStatusUpdate,
 )
 from app.services.auth import get_current_user
 
@@ -190,15 +191,19 @@ async def withdraw_application(
     return _application_to_response(result.scalar_one())
 
 
-# ── Работодатель: принять отклик ────────────────────────────────
+# ── Работодатель: изменить статус отклика (accept/reject) ──────
 
-@router.patch("/{application_id}/accept", response_model=ApplicationResponse)
-async def accept_application(
+async def _change_application_status(
     application_id: int,
-    session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Принять отклик — только владелец вакансии (C6, C7)."""
+    new_status: ApplicationStatus,
+    session: AsyncSession,
+    current_user: User,
+) -> Application:
+    """Shared helper: validate ownership + pending state, then change status.
+
+    Raises HTTPException on any violation (C6, C7).
+    Returns the updated Application (not yet committed — caller must commit).
+    """
     app = await session.get(
         Application,
         application_id,
@@ -207,68 +212,40 @@ async def accept_application(
     if not app:
         raise HTTPException(status_code=404, detail="Отклик не найден")
 
-    # C6: only vacancy owner can accept
-    if app.vacancy.owner_id != current_user.id:
+    # C6: only vacancy owner can change status
+    if not app.vacancy or app.vacancy.owner_id != current_user.id:
         raise HTTPException(
-            status_code=403, detail="Только владелец вакансии может принимать отклики"
+            status_code=403,
+            detail="Только владелец вакансии может изменять статус отклика",
         )
 
-    # C7: only pending can be accepted
+    # C7: only pending applications can transition
     if app.status != ApplicationStatus.PENDING:
         raise HTTPException(
             status_code=409,
-            detail="Можно принять только отклик в статусе 'pending'",
+            detail=f"Нельзя изменить статус: отклик уже находится в состоянии '{app.status.value}'",
         )
 
-    app.status = ApplicationStatus.ACCEPTED
-    await session.commit()
-
-    result = await session.execute(
-        select(Application)
-        .options(
-            selectinload(Application.user).selectinload(User.profile),
-            selectinload(Application.vacancy)
-            .selectinload(Vacancy.owner)
-            .selectinload(User.profile),
-        )
-        .where(Application.id == app.id)
-    )
-    return _application_to_response(result.scalar_one())
+    app.status = new_status
+    return app
 
 
-# ── Работодатель: отклонить отклик ──────────────────────────────
-
-@router.patch("/{application_id}/reject", response_model=ApplicationResponse)
-async def reject_application(
+@router.patch("/{application_id}/status", response_model=ApplicationResponse)
+async def update_application_status(
     application_id: int,
+    data: ApplicationStatusUpdate,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Отклонить отклик — только владелец вакансии (C6, C7)."""
-    app = await session.get(
-        Application,
-        application_id,
-        options=[selectinload(Application.vacancy)],
+    """Принять или отклонить отклик — только владелец вакансии (C6, C7)."""
+    new_status = ApplicationStatus(data.status)
+
+    app = await _change_application_status(
+        application_id, new_status, session, current_user
     )
-    if not app:
-        raise HTTPException(status_code=404, detail="Отклик не найден")
-
-    # C6: only vacancy owner can reject
-    if app.vacancy.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Только владелец вакансии может отклонять отклики"
-        )
-
-    # C7: only pending can be rejected
-    if app.status != ApplicationStatus.PENDING:
-        raise HTTPException(
-            status_code=409,
-            detail="Можно отклонить только отклик в статусе 'pending'",
-        )
-
-    app.status = ApplicationStatus.REJECTED
     await session.commit()
 
+    # Reload with all relationships for the response
     result = await session.execute(
         select(Application)
         .options(
