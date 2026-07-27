@@ -171,7 +171,7 @@ async def withdraw_application(
     if app.status != ApplicationStatus.PENDING:
         raise HTTPException(
             status_code=409,
-            detail="Можно отозвать только отклик в статусе 'pending'",
+            detail=f"Нельзя отозвать отклик: он уже находится в состоянии '{app.status.value}'",
         )
 
     app.status = ApplicationStatus.WITHDRAWN
@@ -213,7 +213,7 @@ async def _change_application_status(
         raise HTTPException(status_code=404, detail="Отклик не найден")
 
     # C6: only vacancy owner can change status
-    if not app.vacancy or app.vacancy.owner_id != current_user.id:
+    if app.vacancy.owner_id != current_user.id:
         raise HTTPException(
             status_code=403,
             detail="Только владелец вакансии может изменять статус отклика",
@@ -224,6 +224,13 @@ async def _change_application_status(
         raise HTTPException(
             status_code=409,
             detail=f"Нельзя изменить статус: отклик уже находится в состоянии '{app.status.value}'",
+        )
+
+    # Defense in depth: only ACCEPTED/REJECTED are valid targets
+    if new_status not in {ApplicationStatus.ACCEPTED, ApplicationStatus.REJECTED}:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Недопустимый целевой статус: '{new_status.value}'",
         )
 
     app.status = new_status
