@@ -16,8 +16,18 @@ export interface MapContainerProps {
   className?: string;
 }
 
+/** Локальный Positron-стиль, адаптированный под наш tileserver и шрифты. */
+const DEFAULT_STYLE_URL = "/maps/positron-style.json";
+
+/** Атрибуция: данные OSM, стиль Positron (CARTO/MapTiler CC-BY 3.0), движок MapLibre. */
+const CUSTOM_ATTRIBUTION =
+  '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap</a> | ' +
+  '<a href="https://carto.com/attributions" target="_blank" rel="noopener">Positron by CARTO / MapTiler</a> (CC-BY) | ' +
+  '<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a>';
+
 /**
- * Базовый контейнер карты на MapLibre.
+ * Контейнер карты MapLibre с фирменным стилем Positron.
+ * - использует локальный style.json (tileserver + nginx fonts proxy),
  * - создаёт инстанс ровно один раз,
  * - ставит маркеры с popup по точкам,
  * - реагирует на изменение selection без пересоздания карты.
@@ -28,7 +38,7 @@ export default function MapContainer(props: MapContainerProps): JSX.Element {
   const markersRef = useRef<Marker[]>([]);
 
   const styleUrl =
-    props.styleUrl ?? import.meta.env.VITE_MAP_STYLE_URL ?? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+    props.styleUrl ?? import.meta.env.VITE_MAP_STYLE_URL ?? DEFAULT_STYLE_URL;
   const center: LngLatLike = (props.center ?? parseCenter(import.meta.env.VITE_MAP_DEFAULT_CENTER)) as LngLatLike;
   const zoom = props.zoom ?? parseZoom(import.meta.env.VITE_MAP_DEFAULT_ZOOM);
 
@@ -40,7 +50,10 @@ export default function MapContainer(props: MapContainerProps): JSX.Element {
       style: styleUrl,
       center,
       zoom,
-      attributionControl: { compact: true },
+      attributionControl: {
+        compact: true,
+        customAttribution: CUSTOM_ATTRIBUTION,
+      },
     });
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
