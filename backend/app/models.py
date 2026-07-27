@@ -49,6 +49,13 @@ class ResponseStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ApplicationStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
+
+
 class NotificationType(str, Enum):
     NEW_RESPONSE = "new_response"
     RESPONSE_STATUS = "response_status"
@@ -171,6 +178,30 @@ class VacancyMedia(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     vacancy = relationship("Vacancy", back_populates="media")
+
+
+class Application(Base):
+    """Отклик соискателя на вакансию — FR-007."""
+    __tablename__ = "applications"
+    __table_args__ = (UniqueConstraint("user_id", "vacancy_id", name="uq_application_user_vacancy"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    vacancy_id: Mapped[int] = mapped_column(ForeignKey("vacancies.id", ondelete="CASCADE"), index=True)
+    cover_letter: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[ApplicationStatus] = mapped_column(
+        SAEnum(ApplicationStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=ApplicationStatus.PENDING,
+        server_default="pending",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, server_default="now()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, server_default="now()"
+    )
+
+    user = relationship("User", foreign_keys=[user_id], backref="applications")
+    vacancy = relationship("Vacancy", foreign_keys=[vacancy_id], backref="applications")
 
 
 class Response(Base):

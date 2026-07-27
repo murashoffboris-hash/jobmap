@@ -204,7 +204,33 @@ class GeocodeResponse(BaseModel):
     type: Optional[str] = None
 
 
-# ── Responses ──
+# ── Applications (FR-007) ──
+
+class ApplicationCreate(BaseModel):
+    vacancy_id: int
+    cover_letter: str | None = Field(default=None, max_length=2000)
+
+
+class ApplicationResponse(BaseModel):
+    id: int
+    user_id: int
+    vacancy_id: int
+    cover_letter: str | None = None
+    status: str  # "pending" | "accepted" | "rejected" | "withdrawn"
+    vacancy_title: str | None = None
+    employer_name: str | None = None
+    applicant_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ApplicationListResponse(BaseModel):
+    items: list[ApplicationResponse]
+    total: int
+    page: int
+    page_size: int
 
 class ResponseCreate(BaseModel):
     message: Optional[str] = None

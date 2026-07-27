@@ -12,6 +12,10 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.routers.applications import (
+    router as applications_router,
+    vacancy_applications_router,
+)
 from app.routers.auth import router as auth_router
 from app.routers.geoservices import router as geo_router
 from app.routers.health import router as health_router
@@ -58,6 +62,8 @@ def create_app() -> FastAPI:
     app.include_router(vacancies_router)
     app.include_router(geo_router)
     app.include_router(auth_router)
+    app.include_router(applications_router)
+    app.include_router(vacancy_applications_router)
 
     return app
 
