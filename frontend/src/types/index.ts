@@ -130,3 +130,36 @@ export interface VacancyFormData {
   lat: number | null;
   lng: number | null;
 }
+
+// ── Applications (FR-007) ──
+
+export type ApplicationStatus = "pending" | "accepted" | "rejected" | "withdrawn";
+
+export interface Application {
+  id: number;
+  user_id: number;
+  vacancy_id: number;
+  cover_letter: string | null;
+  status: ApplicationStatus;
+  vacancy_title: string | null;
+  employer_name: string | null;
+  applicant_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApplicationListResponse {
+  items: Application[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ApplicationCreateRequest {
+  vacancy_id: number;
+  cover_letter?: string | null;
+}
+
+export interface ApplicationStatusUpdateRequest {
+  status: "accepted" | "rejected";
+}

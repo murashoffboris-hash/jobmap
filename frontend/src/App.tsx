@@ -11,6 +11,7 @@ import VacancyDetailPage from "@/pages/VacancyDetailPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import ProfilePage from "@/pages/ProfilePage";
 import VacancyCreatePage from "@/pages/VacancyCreatePage";
+import ApplicationsPage from "@/pages/ApplicationsPage";
 
 export default function App(): JSX.Element {
   return (
@@ -46,6 +47,14 @@ export default function App(): JSX.Element {
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/applications"
+            element={
+              <ProtectedRoute>
+                <ApplicationsPage />
               </ProtectedRoute>
             }
           />

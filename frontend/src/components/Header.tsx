@@ -10,6 +10,7 @@ import {
   Sun,
   User as UserIcon,
   Briefcase,
+  FileText,
   X,
   Sparkles,
 } from "lucide-react";
@@ -221,6 +222,9 @@ export default function Header(): JSX.Element {
                     <MobileNavLink to="/vacancies?mine=1" icon={<Briefcase size={16} />} onClick={() => setMobileOpen(false)}>
                       Мои вакансии
                     </MobileNavLink>
+                    <MobileNavLink to="/applications" icon={<FileText size={16} />} onClick={() => setMobileOpen(false)}>
+                      Мои отклики
+                    </MobileNavLink>
                     {(user.role === "employer" || user.role === "admin") && (
                       <MobileNavLink to="/vacancies/new" icon={<PlusCircle size={16} />} onClick={() => setMobileOpen(false)}>
                         Создать вакансию
@@ -405,6 +409,9 @@ const UserMenu = forwardRef<HTMLDivElement, UserMenuProps>(function UserMenu(
             </MenuLink>
             <MenuLink to="/vacancies?mine=1" icon={<Briefcase size={16} />} onClick={onClose}>
               Мои вакансии
+            </MenuLink>
+            <MenuLink to="/applications" icon={<FileText size={16} />} onClick={onClose}>
+              Мои отклики
             </MenuLink>
             {(role === "employer" || role === "admin") && (
               <MenuLink to="/vacancies/new" icon={<PlusCircle size={16} />} onClick={onClose}>
