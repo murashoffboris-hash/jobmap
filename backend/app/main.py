@@ -18,6 +18,7 @@ from app.routers.applications import (
 )
 from app.routers.auth import router as auth_router
 from app.routers.geoservices import router as geo_router
+from app.monitoring import setup_metrics
 from app.routers.health import router as health_router
 from app.routers.vacancies import router as vacancies_router
 
@@ -59,6 +60,9 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
+
+    # ── Prometheus metrics ──
+    setup_metrics(app)
 
     # ── Routers ──
     app.include_router(health_router)
