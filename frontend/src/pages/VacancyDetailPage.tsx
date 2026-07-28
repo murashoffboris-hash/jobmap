@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import axios from "axios";
 import { vacanciesApi } from "@/api/vacancies";
 import { applicationsApi } from "@/api/applications";
 import { extractApiError } from "@/api/client";
@@ -58,11 +59,14 @@ export default function VacancyDetailPage(): JSX.Element {
   const [coverLetter, setCoverLetter] = useState("");
   const [applying, setApplying] = useState(false);
   const [applySuccess, setApplySuccess] = useState(false);
+  const [appliedId, setAppliedId] = useState<number | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   // Employer: applications for this vacancy
   const [employerApps, setEmployerApps] = useState<Application[]>([]);
   const [employerAppsLoading, setEmployerAppsLoading] = useState(false);
+  const [employerAppsTotal, setEmployerAppsTotal] = useState(0);
   const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
 
   const isOwner = user != null && vacancy != null && user.id === vacancy.employer_id;
@@ -99,7 +103,10 @@ export default function VacancyDetailPage(): JSX.Element {
         const res = await applicationsApi.listByVacancy(vacancy.id, {
           page_size: 50,
         });
-        if (!cancelled) setEmployerApps(res.items);
+        if (!cancelled) {
+          setEmployerApps(res.items);
+          setEmployerAppsTotal(res.total);
+        }
       } catch {
         // silently fail for this section
       } finally {
@@ -115,15 +122,35 @@ export default function VacancyDetailPage(): JSX.Element {
     setApplyError(null);
     setApplying(true);
     try {
-      await applicationsApi.create({
+      const created = await applicationsApi.create({
         vacancy_id: id,
         cover_letter: coverLetter.trim() || undefined,
       });
       setApplySuccess(true);
+      setAppliedId(created.id);
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        setApplySuccess(true);
+        setApplyError(null);
+      } else {
+        setApplyError(extractApiError(err));
+      }
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  async function handleWithdrawFromDetail(): Promise<void> {
+    if (!appliedId) return;
+    setWithdrawing(true);
+    try {
+      await applicationsApi.withdraw(appliedId);
+      setApplySuccess(false);
+      setAppliedId(null);
     } catch (err) {
       setApplyError(extractApiError(err));
     } finally {
-      setApplying(false);
+      setWithdrawing(false);
     }
   }
 
@@ -165,9 +192,21 @@ export default function VacancyDetailPage(): JSX.Element {
         {user && !isOwner && (
           <div className="mt-4 border-t pt-4">
             {applySuccess ? (
-              <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                ✓ Вы откликнулись на эту вакансию
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                  ✓ Вы откликнулись на эту вакансию
+                </p>
+                {appliedId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleWithdrawFromDetail}
+                    loading={withdrawing}
+                  >
+                    Отозвать отклик
+                  </Button>
+                )}
+              </div>
             ) : (
               <Button onClick={() => setShowApplyModal(true)}>
                 Откликнуться
@@ -195,7 +234,14 @@ export default function VacancyDetailPage(): JSX.Element {
       {/* Секция работодателя: отклики на вакансию */}
       {isOwner && (
         <section className="mt-8">
-          <h2 className="mb-4 text-lg font-semibold">Отклики на вакансию</h2>
+          <h2 className="mb-4 text-lg font-semibold">
+            Отклики на вакансию
+            {employerAppsTotal > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center rounded-full bg-brand-100 px-2.5 py-0.5 text-sm font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                {employerAppsTotal}
+              </span>
+            )}
+          </h2>
 
           {employerAppsLoading && (
             <p className="muted text-sm">Загрузка…</p>
