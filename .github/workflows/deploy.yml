@@ -1,13 +1,10 @@
 # CI/CD: авто-деплой JobMap на VPS 104.237.11.110
-# Триггер: push в ветку infra/initial-audit или ручной запуск (workflow_dispatch)
+# Триггер: push в main или ручной запуск (workflow_dispatch)
 # Время от push до ready: ≤ 5 минут
-
-name: Deploy JobMap to VPS
 
 on:
   push:
-    branches:
-      - infra/initial-audit
+    branches: [main]
   workflow_dispatch:
     inputs:
       skip_tests:
