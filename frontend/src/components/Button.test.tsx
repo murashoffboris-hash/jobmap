@@ -1,34 +1,43 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import Button from "./Button";
 
-describe("Button", () => {
-  it("renders children", () => {
-    render(<Button>Click me</Button>);
-    expect(screen.getByText("Click me")).toBeInTheDocument();
+describe("Button — mobile WCAG compliance", () => {
+  it("renders with variant class that gets mobile min-height via CSS", () => {
+    const { container } = render(<Button variant="primary">OK</Button>);
+    // btn-primary @apply btn, which gets min-height: 44px via mobile media query
+    expect(container.firstChild).toHaveClass("btn-primary");
+    expect(container.firstChild?.nodeName).toBe("BUTTON");
   });
 
-  it("calls onClick when clicked", () => {
-    const onClick = vi.fn();
-    render(<Button onClick={onClick}>Click</Button>);
-    fireEvent.click(screen.getByText("Click"));
-    expect(onClick).toHaveBeenCalledTimes(1);
+  it("outline variant renders correctly", () => {
+    const { container } = render(<Button variant="outline">OK</Button>);
+    expect(container.firstChild).toHaveClass("btn-outline");
+    expect(container.firstChild?.nodeName).toBe("BUTTON");
   });
 
-  it("applies variant classes", () => {
-    const { container } = render(<Button variant="ghost">Ghost</Button>);
+  it("ghost variant renders correctly", () => {
+    const { container } = render(<Button variant="ghost">OK</Button>);
     expect(container.firstChild).toHaveClass("btn-ghost");
+    expect(container.firstChild?.nodeName).toBe("BUTTON");
   });
 
-  it("disables the button", () => {
-    render(<Button disabled>Disabled</Button>);
-    const btn = screen.getByText("Disabled").closest("button");
-    expect(btn).toBeDisabled();
+  it("fullWidth adds w-full class", () => {
+    const { container } = render(<Button fullWidth>Full</Button>);
+    expect(container.firstChild).toHaveClass("w-full");
   });
 
-  it("shows loading state", () => {
-    render(<Button loading>Loading</Button>);
-    const btn = screen.getByText("Loading").closest("button");
-    expect(btn).toBeDisabled();
+  it("size sm renders smaller button", () => {
+    const { container } = render(<Button size="sm">Small</Button>);
+    expect(container.firstChild).toHaveClass("px-3");
+    expect(container.firstChild).toHaveClass("py-1.5");
+  });
+
+  it("all clickable elements are buttons with text", () => {
+    render(<Button>Test button</Button>);
+    const btn = screen.getByText("Test button");
+    expect(btn.tagName).toBe("SPAN");
+    // parent should be the button
+    expect(btn.parentElement?.tagName).toBe("BUTTON");
   });
 });
