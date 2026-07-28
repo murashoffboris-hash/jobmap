@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { authApi } from "@/api/auth";
-import { getAccessToken, setAccessToken } from "@/api/client";
+import { getAccessToken, setAccessToken, setRefreshToken } from "@/api/client";
 import type { LoginRequest, RegisterRequest, User } from "@/types";
 
 interface AuthState {
@@ -31,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user, status: "authenticated" });
     } catch {
       setAccessToken(null);
+      setRefreshToken(null);
       set({ user: null, status: "idle" });
     }
   },
@@ -40,6 +41,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const tokens = await authApi.login(req);
       setAccessToken(tokens.access_token);
+      setRefreshToken(tokens.refresh_token);
       const user = await authApi.me();
       set({ user, status: "authenticated" });
     } catch (err) {
@@ -69,6 +71,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // даже если запрос упал — чистим локальное состояние
     } finally {
       setAccessToken(null);
+      setRefreshToken(null);
       set({ user: null, status: "idle", error: null });
     }
   },
