@@ -11,6 +11,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      disable: true, // SW TEMPORARILY DISABLED — кэш браузера не получает обновлённый CSP, MapLibre worker блокируется. Вернуть после PWA v2.
       // Разрешаем фолбэк для SPA-навигации: при офлайне по любому маршруту отдаём index.html.
       navigateFallback: "/index.html",
       navigateFallbackDenylist: [/^\/api\//, /^\/sw\.js$/, /^\/workbox-/, /\.json$/],
