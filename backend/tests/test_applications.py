@@ -125,21 +125,25 @@ async def test_withdraw_not_found(client: AsyncClient):
         pytest.skip("No database available")
 
 
-# ── PATCH /api/applications/{id}/accept ──────────────────────────
+# ── PATCH /api/applications/{id}/status (accept) ──────────────────
 
 @pytest.mark.asyncio
 async def test_accept_unauthorized(client: AsyncClient):
-    """PATCH /api/applications/1/accept без токена → 401."""
-    response = await client.patch("/api/applications/1/accept")
+    """PATCH /api/applications/1/status с status='accepted' без токена → 401."""
+    response = await client.patch(
+        "/api/applications/1/status",
+        json={"status": "accepted"},
+    )
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_accept_not_found(client: AsyncClient):
-    """PATCH /api/applications/99999/accept с токеном → 404."""
+    """PATCH /api/applications/99999/status с status='accepted' → 404."""
     try:
         response = await client.patch(
-            "/api/applications/99999/accept",
+            "/api/applications/99999/status",
+            json={"status": "accepted"},
             headers=_auth(VALID_TOKEN),
         )
         assert response.status_code in (401, 404)
@@ -147,21 +151,25 @@ async def test_accept_not_found(client: AsyncClient):
         pytest.skip("No database available")
 
 
-# ── PATCH /api/applications/{id}/reject ──────────────────────────
+# ── PATCH /api/applications/{id}/status (reject) ──────────────────
 
 @pytest.mark.asyncio
 async def test_reject_unauthorized(client: AsyncClient):
-    """PATCH /api/applications/1/reject без токена → 401."""
-    response = await client.patch("/api/applications/1/reject")
+    """PATCH /api/applications/1/status с status='rejected' без токена → 401."""
+    response = await client.patch(
+        "/api/applications/1/status",
+        json={"status": "rejected"},
+    )
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_reject_not_found(client: AsyncClient):
-    """PATCH /api/applications/99999/reject с токеном → 404."""
+    """PATCH /api/applications/99999/status с status='rejected' → 404."""
     try:
         response = await client.patch(
-            "/api/applications/99999/reject",
+            "/api/applications/99999/status",
+            json={"status": "rejected"},
             headers=_auth(VALID_TOKEN),
         )
         assert response.status_code in (401, 404)
