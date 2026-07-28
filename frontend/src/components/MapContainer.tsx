@@ -68,6 +68,19 @@ export default function MapContainer(props: MapContainerProps): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ResizeObserver — без этого MapLibre не знает, что контейнер изменил размер
+  // (DevTools, открытие боковой панели, resize окна). Вызываем map.resize() при изменениях.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const m = mapRef.current;
+      if (m) m.resize();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // перерисовка маркеров при изменении точек
   useEffect(() => {
     const map = mapRef.current;
