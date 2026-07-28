@@ -58,13 +58,19 @@ def _application_to_response(app: Application) -> ApplicationResponse:
 
 # ── Соискатель: создать отклик ──────────────────────────────────
 
-@router.post("", response_model=ApplicationResponse, status_code=201)
+@router.post(
+    "",
+    response_model=ApplicationResponse,
+    status_code=201,
+    summary="Create application",
+    description="Submit a job application to a vacancy. Cannot apply to own vacancies; duplicate applications are rejected.",
+)
 async def create_application(
     data: ApplicationCreate,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Создать отклик на вакансию (C1-C4, C8)."""
+    """Submit a job application to a vacancy (C1-C4, C8)."""
     # C3: vacancy must exist and not be soft-deleted (archived)
     vacancy = await session.get(Vacancy, data.vacancy_id)
     if not vacancy or vacancy.status == VacancyStatus.ARCHIVED:
@@ -117,7 +123,12 @@ async def create_application(
 
 # ── Соискатель: мои отклики (paginated) ─────────────────────────
 
-@router.get("", response_model=ApplicationListResponse)
+@router.get(
+    "",
+    response_model=ApplicationListResponse,
+    summary="List my applications",
+    description="Paginated list of the current user's applications, sorted by newest first.",
+)
 async def list_my_applications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -153,13 +164,18 @@ async def list_my_applications(
 
 # ── Соискатель: отозвать отклик ─────────────────────────────────
 
-@router.patch("/{application_id}/withdraw", response_model=ApplicationResponse)
+@router.patch(
+    "/{application_id}/withdraw",
+    response_model=ApplicationResponse,
+    summary="Withdraw application",
+    description="Withdraw a pending application. Only the applicant may withdraw. Accepted/rejected applications cannot be withdrawn.",
+)
 async def withdraw_application(
     application_id: int,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Отозвать свой pending-отклик (C5)."""
+    """Withdraw own pending application (C5)."""
     app = await session.get(Application, application_id)
     if not app:
         raise HTTPException(status_code=404, detail="Отклик не найден")
@@ -237,14 +253,19 @@ async def _change_application_status(
     return app
 
 
-@router.patch("/{application_id}/status", response_model=ApplicationResponse)
+@router.patch(
+    "/{application_id}/status",
+    response_model=ApplicationResponse,
+    summary="Update application status",
+    description="Accept or reject an application. Only the vacancy owner may change the status. Only pending applications may be transitioned.",
+)
 async def update_application_status(
     application_id: int,
     data: ApplicationStatusUpdate,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Принять или отклонить отклик — только владелец вакансии (C6, C7)."""
+    """Accept or reject an application — only vacancy owner (C6, C7)."""
     new_status = ApplicationStatus(data.status)
 
     app = await _change_application_status(
@@ -271,6 +292,8 @@ async def update_application_status(
 @vacancy_applications_router.get(
     "/api/vacancies/{vacancy_id}/applications",
     response_model=ApplicationListResponse,
+    summary="List vacancy applications",
+    description="Paginated list of applications for a specific vacancy. Only the vacancy owner may view.",
 )
 async def list_vacancy_applications(
     vacancy_id: int,

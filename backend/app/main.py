@@ -40,6 +40,9 @@ def create_app() -> FastAPI:
         title=settings.SERVICE_NAME,
         version="0.1.0",
         lifespan=lifespan,
+        openapi_url="/api/openapi.json",
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
     )
 
     # ── CORS ──

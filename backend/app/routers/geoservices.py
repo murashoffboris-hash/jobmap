@@ -18,7 +18,12 @@ from app.services.osrm import get_route
 router = APIRouter(prefix="/api/geo", tags=["geoservices"])
 
 
-@router.post("/geocode", response_model=GeocodeResponse)
+@router.post(
+    "/geocode",
+    response_model=GeocodeResponse,
+    summary="Geocode address",
+    description="Convert a street address to coordinates via Nominatim. Returns 502 if the geocoding service is unavailable.",
+)
 async def geocode(
     data: GeocodeRequest,
     session: AsyncSession = Depends(get_session),
@@ -34,7 +39,12 @@ async def geocode(
     return GeocodeResponse(**result)
 
 
-@router.get("/reverse", response_model=GeocodeResponse)
+@router.get(
+    "/reverse",
+    response_model=GeocodeResponse,
+    summary="Reverse geocode",
+    description="Convert latitude/longitude coordinates to a human-readable address via Nominatim.",
+)
 async def reverse(lat: float, lon: float):
     """Reverse geocode coordinates via Nominatim.
 
@@ -52,7 +62,12 @@ async def reverse(lat: float, lon: float):
     )
 
 
-@router.post("/route", response_model=RouteResponse)
+@router.post(
+    "/route",
+    response_model=RouteResponse,
+    summary="Get route",
+    description="Calculate a driving route between two points via OSRM. Returns distance, duration, and geometry.",
+)
 async def route(data: RouteRequest):
     """Get route between two points via OSRM."""
     result = await get_route(

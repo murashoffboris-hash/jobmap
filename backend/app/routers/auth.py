@@ -38,12 +38,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 login_limiter = Limiter(key_func=get_remote_address, default_limits=["5/minute"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=201,
+    summary="Register new user",
+    description="Create a new user account with email and password. An empty profile is automatically created.",
+)
 async def register(data: RegisterRequest, session: AsyncSession = Depends(get_session)):
-    """Register a new user account.
-
-    Creates a User and an associated empty Profile.
-    """
     # Check if email already exists
     result = await session.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
@@ -71,10 +73,14 @@ async def register(data: RegisterRequest, session: AsyncSession = Depends(get_se
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Login",
+    description="Authenticate with email and password. Returns access + refresh JWT tokens. Rate-limited: 5 requests/minute per IP.",
+)
 @login_limiter.limit("5/minute")
 async def login(request: Request, data: LoginRequest, session: AsyncSession = Depends(get_session)):
-    """Authenticate with email + password, receive JWT pair."""
     result = await session.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.hashed_password):
@@ -90,9 +96,13 @@ async def login(request: Request, data: LoginRequest, session: AsyncSession = De
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh access token",
+    description="Exchange a valid refresh token for a new access + refresh token pair.",
+)
 async def refresh(data: RefreshRequest):
-    """Issue a new access token using a valid refresh token."""
     payload = decode_token(data.refresh_token)
 
     # Ensure this is a refresh-type token
@@ -119,9 +129,13 @@ async def refresh(data: RefreshRequest):
     )
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Get current user profile",
+    description="Return the authenticated user's profile including avatar, full name, phone, and bio.",
+)
 async def me(current_user: User = Depends(get_current_user)):
-    """Return the currently authenticated user's profile."""
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -134,13 +148,17 @@ async def me(current_user: User = Depends(get_current_user)):
     )
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update current user profile",
+    description="Update the authenticated user's editable fields: full_name, phone, bio.",
+)
 async def update_me(
     data: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Update the authenticated user's editable profile fields."""
     profile_result = await session.execute(
         select(Profile).where(Profile.user_id == current_user.id)
     )
@@ -170,17 +188,17 @@ async def update_me(
 # ── Avatar endpoints ──
 
 
-@router.post("/me/avatar", response_model=UserResponse)
+@router.post(
+    "/me/avatar",
+    response_model=UserResponse,
+    summary="Upload avatar",
+    description="Upload a profile avatar image (JPEG, PNG, WebP; max 5 MB). Content is validated by magic bytes, not file extension.",
+)
 async def upload_me_avatar(
     file: UploadFile,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Upload an avatar image (multipart/form-data, field name 'file').
-
-    Allowed formats: JPEG, PNG, WebP. Max size: 5 MB.
-    Content is validated by magic bytes (not by extension).
-    """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -231,15 +249,14 @@ async def upload_me_avatar(
     )
 
 
-@router.get("/me/avatar")
+@router.get(
+    "/me/avatar",
+    summary="Get avatar redirect",
+    description="Redirect to a presigned URL for the current user's avatar. Returns 404 if no avatar set.",
+)
 async def get_me_avatar(
     current_user: User = Depends(get_current_user),
 ):
-    """Redirect to a presigned URL for the current user's avatar.
-
-    If no avatar is set, returns 404.
-    Uses presigned URL (backend does NOT proxy the image bytes).
-    """
     if not current_user.profile or not current_user.profile.avatar_url:
         raise HTTPException(status_code=404, detail="No avatar set")
 
@@ -252,12 +269,16 @@ async def get_me_avatar(
     return RedirectResponse(url=presigned, status_code=307)
 
 
-@router.delete("/me/avatar", response_model=UserResponse)
+@router.delete(
+    "/me/avatar",
+    response_model=UserResponse,
+    summary="Delete avatar",
+    description="Delete the current user's avatar from storage and clear the avatar_url field.",
+)
 async def delete_me_avatar(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Delete the current user's avatar from storage and clear the field."""
     profile_result = await session.execute(
         select(Profile).where(Profile.user_id == current_user.id)
     )

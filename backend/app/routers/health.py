@@ -68,7 +68,12 @@ async def _collect_dependencies() -> dict[str, str]:
     }
 
 
-@router.get("", response_model=HealthResponse)
+@router.get(
+    "",
+    response_model=HealthResponse,
+    summary="Health check",
+    description="Service health probe. Checks PostgreSQL (with PostGIS) and Redis connectivity. Cached for 10 seconds to survive burst traffic.",
+)
 async def health_check():
     """Health probe — cached for 10 s to survive burst traffic.
 
