@@ -165,9 +165,9 @@ export default function VacancyDetailPage(): JSX.Element {
         {user && !isOwner && (
           <div className="mt-4 border-t pt-4">
             {applySuccess ? (
-              <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                ✓ Вы откликнулись на эту вакансию
-              </p>
+              <Button disabled>
+                Вы откликнулись
+              </Button>
             ) : (
               <Button onClick={() => setShowApplyModal(true)}>
                 Откликнуться
