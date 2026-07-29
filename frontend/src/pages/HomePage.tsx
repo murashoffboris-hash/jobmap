@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import MapContainer from "@/components/MapContainer";
 import VacancyCard from "@/components/VacancyCard";
 import { vacanciesApi } from "@/api/vacancies";
+import { formatSalary } from "@/utils/format";
 import type { Vacancy, MapPoint } from "@/types";
 
 export default function HomePage(): JSX.Element {
+  const navigate = useNavigate();
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,7 @@ export default function HomePage(): JSX.Element {
       lat: v.latitude as number,
       lng: v.longitude as number,
       title: v.title,
+      salary: formatSalary(v.salary_from, v.salary_to, v.currency),
       payload: { vacancyId: v.id },
     }));
 
@@ -43,7 +47,10 @@ export default function HomePage(): JSX.Element {
       <h1 className="page__title">Вакансии на карте</h1>
       <div className="layout">
         <div>
-          <MapContainer points={points} />
+          <MapContainer
+            points={points}
+            onMarkerClick={(p) => navigate(`/vacancies/${p.id}`)}
+          />
         </div>
         <aside>
           {loading && <p className="muted">Загрузка вакансий…</p>}
