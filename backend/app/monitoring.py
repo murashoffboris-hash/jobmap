@@ -1,8 +1,8 @@
 """Prometheus metrics for FastAPI — exposed at /metrics."""
 
+from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator.metrics import latency
-from fastapi import FastAPI
 
 
 def setup_metrics(app: FastAPI) -> Instrumentator:

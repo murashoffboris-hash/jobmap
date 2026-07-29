@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -36,9 +36,9 @@ async def mock_user_client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     """
     from unittest.mock import AsyncMock, MagicMock
 
-    from app.routers.auth import get_current_user as auth_get_current_user
     from app.dependencies import get_session
-    from app.models import Profile, UserRole
+    from app.models import Profile
+    from app.routers.auth import get_current_user as auth_get_current_user
 
     # Build a mock authenticated user with a profile
     mock_user = MagicMock(spec=User)

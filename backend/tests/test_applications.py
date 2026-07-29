@@ -7,7 +7,6 @@ from httpx import AsyncClient
 
 from app.services.auth import create_access_token
 
-
 # ── Helpers ──────────────────────────────────────────────────────
 
 def _auth(token: str) -> dict[str, str]:

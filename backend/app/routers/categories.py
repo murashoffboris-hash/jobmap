@@ -24,7 +24,7 @@ async def list_categories(
 ) -> list[CategoryResponse]:
     result = await session.execute(
         select(Category)
-        .where(Category.is_active == True)  # noqa: E712
+        .where(Category.is_active == True)
         .order_by(Category.name)
     )
     return [

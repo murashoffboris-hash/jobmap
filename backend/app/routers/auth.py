@@ -9,11 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_session
-from app.models import User, Profile
+from app.models import Profile, User
 from app.schemas import (
-    RegisterRequest,
     LoginRequest,
     RefreshRequest,
+    RegisterRequest,
     TokenResponse,
     UpdateProfileRequest,
     UserResponse,

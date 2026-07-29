@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,GET /api/vacancies/{id},HTTPError('404 Client Error: Not Found for url: GET /api/vacancies/{id}'),94,2026-07-27T20:27:37Z,2026-07-27T20:30:05Z
+POST,POST /api/auth/login,HTTPError('503 Server Error: Service Temporarily Unavailable for url: POST /api/auth/login'),3,2026-07-27T20:27:37Z,2026-07-27T20:27:37Z
+GET,GET /api/applications,HTTPError('401 Client Error: Unauthorized for url: GET /api/applications'),671,2026-07-27T20:27:32Z,2026-07-27T20:30:22Z
+POST,POST /api/auth/login,HTTPError('429 Client Error: Too Many Requests for url: POST /api/auth/login'),87,2026-07-27T20:27:29Z,2026-07-27T20:27:39Z

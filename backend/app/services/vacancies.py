@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Vacancy, VacancyStatus
-from app.schemas import VacancyCreate, VacancyUpdate, VacancyResponse
+from app.schemas import VacancyCreate, VacancyResponse, VacancyUpdate
 from app.services.nominatim import geocode_address
 
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ async def update_vacancy(
     """Update vacancy fields. If address changes, re-geocode."""
     update_data = data.model_dump(exclude_unset=True)
 
-    if "address" in update_data and update_data["address"]:
+    if update_data.get("address"):
         vacancy.address_raw = update_data.pop("address")
         geo = await geocode_address(session, vacancy.address_raw, vacancy_id=vacancy.id)
         if geo:

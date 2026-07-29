@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from logging.config import fileConfig
 
@@ -14,12 +13,13 @@ from sqlalchemy.orm import configure_mappers
 sys.path.insert(0, "/app")
 
 from app.database import Base
-from app.models import *  # noqa: F401,F403
+from app.models import *
 
 config = context.config
 
 # Override sqlalchemy.url from env
 from app.config import settings
+
 config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 
 if config.config_file_name is not None:

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import uuid
 from io import BytesIO
-from typing import Optional
 
 import boto3
 from botocore.client import Config as BotoConfig
@@ -15,7 +14,6 @@ from botocore.exceptions import ClientError
 from PIL import Image
 
 from app.config import settings
-
 
 ALLOWED_IMAGE_TYPES: frozenset[str] = frozenset(
     {"image/jpeg", "image/png", "image/webp"}

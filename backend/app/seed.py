@@ -15,7 +15,6 @@ Creates:
 from __future__ import annotations
 
 import argparse
-import sys
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 
@@ -23,7 +22,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import Base
 
 # ── Constants ──────────────────────────────────────────────────────
 
@@ -248,7 +246,7 @@ def seed_vacancies(session: Session, category_map: dict[str, int], user_map: dic
             lat, lng = _random_offset()
             # Check if vacancy already exists
             slug = f"{title}-{cat_slug}-seed"
-            hash_val = sha256(slug.encode()).hexdigest()[:12]
+            _hash_val = sha256(slug.encode()).hexdigest()[:12]
             existing = session.execute(
                 text("SELECT id FROM vacancies WHERE title = :title AND category_id = :cat_id AND owner_id = :owner"),
                 {"title": title, "cat_id": cat_id, "owner": employer_id},

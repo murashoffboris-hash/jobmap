@@ -1,0 +1,17 @@
+# Ruff configuration for JobMap backend
+# FastAPI uses Depends() in function argument defaults — standard pattern
+# Health checks and fallback code use broad except — intentional
+
+[lint]
+ignore = [
+    "B008",    # FastAPI: Depends() in argument defaults — standard pattern
+    "BLE001",  # Health checks and fallback intentionally catch broad Exception
+    "B017",    # Tests legitimately use pytest.raises(Exception)
+    "SIM117",  # Nested with — stylistic preference
+    "S110",    # Tests: try-except-pass for expected failures
+    "PIE810",  # startswith — stylistic
+    "PLW1510", # subprocess.run without check — intentional
+    "SIM103",  # negated-condition readability — intentional
+]
+
+

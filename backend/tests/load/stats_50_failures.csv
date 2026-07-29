@@ -1,0 +1,9 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,POST /api/applications,HTTPError('401 Client Error: Unauthorized for url: POST /api/applications'),279,2026-07-28T18:32:18Z,2026-07-28T18:34:11Z
+POST,POST /api/auth/login,HTTPError('503 Server Error: Service Temporarily Unavailable for url: POST /api/auth/login'),22,2026-07-28T18:32:17Z,2026-07-28T18:32:23Z
+GET,GET /api/applications,HTTPError('401 Client Error: Unauthorized for url: GET /api/applications'),263,2026-07-28T18:32:17Z,2026-07-28T18:34:12Z
+POST,POST /api/auth/login,HTTPError('429 Client Error: Too Many Requests for url: POST /api/auth/login'),14,2026-07-28T18:32:18Z,2026-07-28T18:32:23Z
+POST,POST /api/applications,HTTPError('409 Client Error: Conflict for url: POST /api/applications'),41,2026-07-28T18:32:24Z,2026-07-28T18:34:10Z
+POST,POST /api/auth/register,CatchResponseError('Register: 503'),20,2026-07-28T18:32:16Z,2026-07-28T18:32:23Z
+GET,GET /api/vacancies/{id},CatchResponseError('HTTP 0'),1,2026-07-28T18:33:36Z,2026-07-28T18:33:36Z
+POST,POST /api/auth/login,HTTPError('401 Client Error: Unauthorized for url: POST /api/auth/login'),4,2026-07-28T18:32:18Z,2026-07-28T18:32:20Z
