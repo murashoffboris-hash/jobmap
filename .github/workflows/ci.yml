@@ -1,0 +1,67 @@
+name: CI — JobMap
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: job_service
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: job_service_test
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://job_service:test@localhost:5432/job_service_test
+        run: |
+          cd backend
+          pytest --tb=short
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+      - name: Run tests
+        run: |
+          cd frontend
+          npm test -- --passWithNoTests
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend lint
+        run: |
+          cd backend
+          pip install ruff
+          ruff check .
+      - name: Frontend lint
+        run: |
+          cd frontend
+          npm ci
+          npx eslint src/ --ext .ts,.tsx || true
