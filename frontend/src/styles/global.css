@@ -176,3 +176,19 @@
 .map-container {
   @apply w-full h-full rounded-xl;
 }
+
+/* Маркер карты с ценой */
+.map-price-badge {
+  background: #fff;
+  color: #1e293b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  border: 1px solid #0f172a;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}

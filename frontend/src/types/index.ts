@@ -97,6 +97,7 @@ export interface MapPoint {
   lat: number;
   lng: number;
   title: string;
+  salary?: string;
   payload?: Record<string, unknown>;
 }
 

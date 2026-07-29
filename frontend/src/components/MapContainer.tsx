@@ -94,12 +94,8 @@ export default function MapContainer(props: MapContainerProps): JSX.Element {
     const points = props.points ?? [];
     for (const p of points) {
       const el = document.createElement("div");
-      el.style.width = "20px";
-      el.style.height = "20px";
-      el.style.borderRadius = "50%";
-      el.style.background = "#f59e0b";
-      el.style.border = "2px solid #0f172a";
-      el.style.cursor = "pointer";
+      el.className = "map-price-badge";
+      el.textContent = p.salary ?? "";
       el.title = p.title;
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -109,7 +105,7 @@ export default function MapContainer(props: MapContainerProps): JSX.Element {
         .setLngLat([p.lng, p.lat])
         .setPopup(
           new maplibregl.Popup({ offset: 14, closeButton: false }).setHTML(
-            `<strong>${escapeHtml(p.title)}</strong>`,
+            `<strong>${escapeHtml(p.title)}</strong>${p.salary ? `<br><span>${escapeHtml(p.salary)}</span>` : ""}`,
           ),
         )
         .addTo(map);
