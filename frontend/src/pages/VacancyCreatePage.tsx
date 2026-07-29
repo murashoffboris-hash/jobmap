@@ -319,7 +319,7 @@ export default function VacancyCreatePage(): JSX.Element {
             <DollarSign size={14} />
             Зарплата
           </legend>
-          <div className="grid grid-cols-3 gap-3 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
             <Input
               label="От"
               type="number"

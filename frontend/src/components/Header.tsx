@@ -89,10 +89,10 @@ export default function Header(): JSX.Element {
         "dark:border-ink-800 dark:bg-ink-950/80",
       )}
     >
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-2 sm:px-6 md:h-16 md:flex-nowrap md:py-0">
         <Link
           to="/"
-          className="group flex items-center gap-2 text-base font-semibold tracking-tight text-ink-900 dark:text-ink-50"
+          className="group flex items-center gap-2 text-base font-semibold tracking-tight text-ink-900 dark:text-ink-50 shrink-0"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-soft transition-transform group-hover:scale-105">
             <Sparkles size={18} aria-hidden="true" />
@@ -100,6 +100,7 @@ export default function Header(): JSX.Element {
           <span>JobMap</span>
         </Link>
 
+        {/* Desktop nav */}
         <nav className="ml-6 hidden items-center gap-1 md:flex" aria-label="Основная навигация">
           <HeaderNavLink to="/" icon={<MapIcon size={16} />}>
             Карта
@@ -145,14 +146,31 @@ export default function Header(): JSX.Element {
             /> : <GuestActions />}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="btn-ghost h-10 w-10 p-0 md:hidden"
-            aria-label="Открыть меню"
-          >
-            <Menu size={20} />
-          </button>
+          {/* Mobile: show auth buttons inline + hamburger for full nav */}
+          <div className="flex items-center gap-2 md:hidden">
+            {user ? (
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="btn-ghost flex items-center gap-1.5 px-3"
+              >
+                <Avatar name={user.full_name} email={user.email} size="sm" />
+                <span className="text-sm font-medium max-w-[100px] truncate">
+                  {user.full_name?.trim() || user.email.split("@")[0] || "Профиль"}
+                </span>
+              </button>
+            ) : (
+              <GuestActions />
+            )}
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="btn-ghost h-10 w-10 p-0"
+              aria-label="Открыть меню"
+            >
+              <Menu size={20} />
+            </button>
+          </div>
         </div>
       </div>
 

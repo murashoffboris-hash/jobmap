@@ -94,6 +94,63 @@
   flex-direction: column;
 }
 
+/* ===== Мобильная адаптация (<768px) ===== */
+@media (max-width: 767px) {
+  /* WCAG: минимальная высота кнопок 44px для тач-экранов */
+  .btn,
+  .btn-primary,
+  .btn-ghost,
+  .btn-outline,
+  button[type="submit"],
+  button[type="button"],
+  a.btn-primary,
+  a.btn-ghost,
+  a.btn-outline {
+    min-height: 44px;
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
+
+  /* Минимальный размер шрифта 14px для читаемости */
+  body,
+  .text-sm {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Отключение горизонтального скролла */
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* Полноширинные поля ввода на мобильных */
+  .input,
+  select.input,
+  textarea.input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Карта: 50vh на мобильных */
+  .layout > div:first-child {
+    @apply h-[50vh] min-h-[250px];
+  }
+
+  /* Сайдбар скроллится, без фиксированной высоты */
+  .layout > aside {
+    @apply max-h-none overflow-y-visible;
+  }
+}
+
+/* Превентивный горизонтальный скролл на всех разрешениях */
+*,
+*::before,
+*::after {
+  max-width: 100%;
+}
+
 /* ===== HomePage layout & map ===== */
 .page {
   @apply flex-1 flex flex-col p-4;
@@ -105,8 +162,13 @@
   @apply flex flex-col gap-4 flex-1 min-h-0;
   height: calc(100vh - 64px - 2rem);
 }
+@media (min-width: 768px) {
+  .layout > div:first-child {
+    @apply h-[50vh] min-h-[300px] flex-shrink-0;
+  }
+}
 .layout > div:first-child {
-  @apply w-full h-[50vh] min-h-[300px] flex-shrink-0;
+  @apply w-full;
 }
 .layout > aside {
   @apply w-full flex flex-col gap-3 overflow-y-auto min-h-0;
