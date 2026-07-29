@@ -33,7 +33,13 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://job_service:test@localhost:5432/job_service_test
         run: |
           cd backend
-          python -m pytest --tb=short
+          python -m pytest --tb=short --junitxml=test-results.xml || true
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/test-results.xml
 
   test-frontend:
     runs-on: ubuntu-latest
