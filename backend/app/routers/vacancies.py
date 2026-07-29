@@ -162,8 +162,8 @@ async def list_vacancies(
     ``prev_cursor`` (non-null when a previous page exists).
 
     Filter params:
-    - ``search`` — full-text ILIKE on title and description
-    - ``city`` — ILIKE filter on address_normalized
+    - ``search`` — full-text search on title and description (case-insensitive, Unicode-safe)
+    - ``city`` — case-insensitive filter on address_normalized (Unicode-safe)
     - ``salary_min`` / ``salary_max`` — salary range (inclusive)
     - ``employment_type`` — ``full_time``, ``part_time``, ``gig``
     - ``category_id`` — category filter
@@ -206,17 +206,22 @@ async def list_vacancies(
         query = query.where(Vacancy.category_id == category_id)
 
     # Full-text search on title AND description
+    # Uses explicit LOWER()+LIKE instead of ILIKE for robust
+    # Cyrillic / Unicode matching regardless of LC_CTYPE collation.
     if search:
         query = query.where(
             or_(
-                Vacancy.title.ilike(f"%{search}%"),
-                Vacancy.description.ilike(f"%{search}%"),
+                func.lower(Vacancy.title).contains(search.lower()),
+                func.lower(Vacancy.description).contains(search.lower()),
             )
         )
 
-    # City filter
+    # City filter — explicit LOWER()+LIKE for robust Cyrillic matching
+    # (ILIKE depends on LC_CTYPE; LOWER() handles Unicode in all collations).
     if city:
-        query = query.where(Vacancy.address_normalized.ilike(f"%{city}%"))
+        query = query.where(
+            func.lower(Vacancy.address_normalized).contains(city.lower())
+        )
 
     # Keyset pagination: WHERE (created_at, id) < (cursor_ts, cursor_id)
     if cursor_obj is not None:
