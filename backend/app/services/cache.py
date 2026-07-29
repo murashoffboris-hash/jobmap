@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from redis.asyncio import Redis
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 # ── Connection singleton ──────────────────────────────────────────
-_redis: Optional[Redis] = None
+_redis: Redis | None = None
 
 
 async def get_redis() -> Redis:
@@ -41,7 +41,7 @@ async def close_redis() -> None:
 
 # ── Cache primitives ──────────────────────────────────────────────
 
-async def cache_get(key: str) -> Optional[Any]:
+async def cache_get(key: str) -> Any | None:
     """Return the deserialised value at *key*, or *None* if missing."""
     try:
         r = await get_redis()

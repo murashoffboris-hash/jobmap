@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,7 +10,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.routers.vacancies import _list_cache_key
-
 
 # ── Helpers ───────────────────────────────────────────────────────
 

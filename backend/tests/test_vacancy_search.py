@@ -12,9 +12,6 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.main import create_app
-
-
 # ═══════════════════════════════════════════════════════════════════
 # Shared fixtures — mock DB + cache for all route-level tests
 # ═══════════════════════════════════════════════════════════════════

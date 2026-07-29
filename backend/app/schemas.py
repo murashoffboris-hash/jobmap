@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import UserRole, VacancyStatus, ResponseStatus
-
+from app.models import ResponseStatus, UserRole, VacancyStatus
 
 # ── Auth ──
 
@@ -79,46 +77,46 @@ class UpdateProfileRequest(BaseModel):
 
 class VacancyCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=255, example="Python Backend Developer")
-    description: Optional[str] = Field(default=None, example="Разработка и поддержка микросервисов на FastAPI")
-    category_id: Optional[int] = Field(default=None, example=1)
-    address: Optional[str] = Field(default=None, example="Минск, ул. Ленина, 10")
-    salary_from: Optional[int] = Field(default=None, example=2500)
-    salary_to: Optional[int] = Field(default=None, example=4000)
+    description: str | None = Field(default=None, example="Разработка и поддержка микросервисов на FastAPI")
+    category_id: int | None = Field(default=None, example=1)
+    address: str | None = Field(default=None, example="Минск, ул. Ленина, 10")
+    salary_from: int | None = Field(default=None, example=2500)
+    salary_to: int | None = Field(default=None, example=4000)
     salary_currency: str = Field(default="BYN", example="BYN")
-    schedule_type: Optional[str] = Field(default=None, example="full-time")
-    contact_phone: Optional[str] = Field(default=None, example="+375291234567")
-    contact_name: Optional[str] = Field(default=None, example="Анна Петрова")
+    schedule_type: str | None = Field(default=None, example="full-time")
+    contact_phone: str | None = Field(default=None, example="+375291234567")
+    contact_name: str | None = Field(default=None, example="Анна Петрова")
     exact_location_public: bool = Field(default=False, example=False)
-    scheduled_publish_at: Optional[datetime] = None
+    scheduled_publish_at: datetime | None = None
 
 class VacancyUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=3, max_length=255)
-    description: Optional[str] = None
-    category_id: Optional[int] = None
-    address: Optional[str] = None
-    salary_from: Optional[int] = None
-    salary_to: Optional[int] = None
-    salary_currency: Optional[str] = None
-    schedule_type: Optional[str] = None
-    contact_phone: Optional[str] = None
-    contact_name: Optional[str] = None
-    status: Optional[VacancyStatus] = None
-    exact_location_public: Optional[bool] = None
+    title: str | None = Field(None, min_length=3, max_length=255)
+    description: str | None = None
+    category_id: int | None = None
+    address: str | None = None
+    salary_from: int | None = None
+    salary_to: int | None = None
+    salary_currency: str | None = None
+    schedule_type: str | None = None
+    contact_phone: str | None = None
+    contact_name: str | None = None
+    status: VacancyStatus | None = None
+    exact_location_public: bool | None = None
 
 class VacancyResponse(BaseModel):
     id: int = Field(..., example=42)
     title: str = Field(..., example="Python Backend Developer")
-    description: Optional[str] = Field(default=None, example="Разработка микросервисов...")
+    description: str | None = Field(default=None, example="Разработка микросервисов...")
     status: VacancyStatus = Field(..., example="active")
-    address_normalized: Optional[str] = Field(default=None, example="Минск")
-    location_lat: Optional[float] = Field(default=None, example=53.9000)
-    location_lon: Optional[float] = Field(default=None, example=27.5667)
+    address_normalized: str | None = Field(default=None, example="Минск")
+    location_lat: float | None = Field(default=None, example=53.9000)
+    location_lon: float | None = Field(default=None, example=27.5667)
     geocode_status: str = Field(default="not_requested", example="success")
-    salary_from: Optional[int] = Field(default=None, example=2500)
-    salary_to: Optional[int] = Field(default=None, example=4000)
+    salary_from: int | None = Field(default=None, example=2500)
+    salary_to: int | None = Field(default=None, example=4000)
     salary_currency: str = Field(default="BYN", example="BYN")
-    schedule_type: Optional[str] = Field(default=None, example="full-time")
-    contact_phone: Optional[str] = Field(default=None, example="+375291234567")
+    schedule_type: str | None = Field(default=None, example="full-time")
+    contact_phone: str | None = Field(default=None, example="+375291234567")
     exact_location_public: bool = Field(default=False, example=False)
     created_at: datetime = Field(..., example="2026-07-28T12:00:00Z")
 
@@ -131,18 +129,18 @@ class VacancySearchRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     radius_km: float = Field(gt=0, le=500, default=10.0)
-    category_id: Optional[int] = None
-    salary_from: Optional[int] = None
-    salary_to: Optional[int] = None
+    category_id: int | None = None
+    salary_from: int | None = None
+    salary_to: int | None = None
 
 class VacancyGeoResult(BaseModel):
     id: int
     title: str
-    location_lat: Optional[float] = None
-    location_lon: Optional[float] = None
-    distance_m: Optional[float] = None
-    salary_from: Optional[int] = None
-    salary_to: Optional[int] = None
+    location_lat: float | None = None
+    location_lon: float | None = None
+    distance_m: float | None = None
+    salary_from: int | None = None
+    salary_to: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -152,16 +150,16 @@ class VacancyGeoResult(BaseModel):
 class VacancyListItem(BaseModel):
     id: int
     title: str
-    description: Optional[str] = None
-    salary_from: Optional[int] = None
-    salary_to: Optional[int] = None
+    description: str | None = None
+    salary_from: int | None = None
+    salary_to: int | None = None
     salary_currency: str = Field("BYN", serialization_alias="currency")
-    employment_type: Optional[str] = None
-    city: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    employer_id: Optional[int] = None
-    employer_name: Optional[str] = None
+    employment_type: str | None = None
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    employer_id: int | None = None
+    employer_name: str | None = None
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
@@ -187,9 +185,9 @@ class RouteRequest(BaseModel):
     profile: str = "car"
 
 class RouteResponse(BaseModel):
-    distance_m: Optional[float] = None
-    duration_min: Optional[float] = None
-    geometry: Optional[str] = None
+    distance_m: float | None = None
+    duration_min: float | None = None
+    geometry: str | None = None
 
 
 # ── Geocoding ──
@@ -198,11 +196,11 @@ class GeocodeRequest(BaseModel):
     address: str = Field(..., min_length=2, max_length=512, example="Минск, ул. Ленина, 10")
 
 class GeocodeResponse(BaseModel):
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    osm_id: Optional[str] = None
-    display_name: Optional[str] = None
-    type: Optional[str] = None
+    lat: float | None = None
+    lon: float | None = None
+    osm_id: str | None = None
+    display_name: str | None = None
+    type: str | None = None
 
 
 # ── Applications (FR-007) ──
@@ -249,7 +247,7 @@ class ApplicationStatusUpdate(BaseModel):
 
 
 class ResponseCreate(BaseModel):
-    message: Optional[str] = None
+    message: str | None = None
 
 class ResponseUpdate(BaseModel):
     status: ResponseStatus

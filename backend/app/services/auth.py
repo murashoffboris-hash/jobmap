@@ -7,13 +7,11 @@ are configured in app.config.Settings.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
@@ -25,7 +23,7 @@ security_scheme = HTTPBearer()
 
 def create_access_token(
     data: dict,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """Create a signed HS256 JWT access token.
 
@@ -49,7 +47,7 @@ def create_access_token(
 
 def create_refresh_token(
     data: dict,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """Create a longer-lived refresh token."""
     to_encode = data.copy()

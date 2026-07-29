@@ -10,7 +10,6 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from PIL import Image as PILImage
 
-
 # ── Helpers ──
 
 
@@ -309,8 +308,9 @@ class TestValidateAvatarSecurity:
     def test_pillow_decompression_bomb_error_raises(self) -> None:
         """Pillow's own DecompressionBombError → caught and re-raised as ValueError."""
         from unittest.mock import patch as mock_patch
+
         from PIL import Image
-        from app.services.storage import validate_avatar
+
 
         # Use a small valid PNG, but mock Image.open to raise DecompressionBombError
         png_bytes = _make_png_bytes()
@@ -324,7 +324,7 @@ class TestValidateAvatarSecurity:
 @pytest.mark.asyncio
 async def test_upload_valid_jpeg_with_mock(mock_user_client: AsyncClient):
     """Full upload flow with mocked S3 and auth (via dependency overrides)."""
-    with patch("app.routers.auth.ensure_bucket_exists", new_callable=AsyncMock) as mock_bucket, \
+    with patch("app.routers.auth.ensure_bucket_exists", new_callable=AsyncMock) as _mock_bucket, \
          patch("app.routers.auth.upload_avatar", new_callable=AsyncMock) as mock_upload, \
          patch("app.routers.auth.get_avatar_presigned_url", new_callable=AsyncMock) as mock_presigned:
 
@@ -348,7 +348,7 @@ async def test_upload_valid_jpeg_with_mock(mock_user_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_delete_avatar_with_mock(mock_user_client: AsyncClient):
     """Full delete flow with mocked S3 (via dependency overrides)."""
-    with patch("app.routers.auth.delete_avatar", new_callable=AsyncMock) as mock_delete:
+    with patch("app.routers.auth.delete_avatar", new_callable=AsyncMock) as _mock_delete:
 
         response = await mock_user_client.delete("/api/auth/me/avatar")
 
@@ -367,11 +367,10 @@ async def test_get_avatar_with_mock(mock_user_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_get_avatar_redirect_when_set(app: FastAPI):
     """GET avatar when avatar IS set — expect 307 redirect."""
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock
 
     from app.dependencies import get_session
     from app.routers.auth import get_current_user
-    from app.models import Profile
 
     with patch("app.routers.auth.get_avatar_presigned_url", new_callable=AsyncMock) as mock_presigned:
         mock_presigned.return_value = "http://minio:9000/bucket/avatars/1/test.jpg?X-Amz-Signature=test"

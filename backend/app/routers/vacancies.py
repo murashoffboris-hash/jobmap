@@ -14,10 +14,9 @@ instead of OFFSET/LIMIT — p95 latency stays constant regardless of scroll dept
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,7 +25,6 @@ from app.models import User, Vacancy, VacancyStatus
 from app.schemas import (
     CacheStatsResponse,
     VacancyCreate,
-    VacancyGeoResult,
     VacancyListItem,
     VacancyListResponse,
     VacancyResponse,
@@ -44,9 +42,13 @@ from app.services.cache import (
 from app.services.cursor import Cursor
 from app.services.vacancies import (
     create_vacancy as create_vacancy_svc,
+)
+from app.services.vacancies import (
     geo_search,
-    update_vacancy as update_vacancy_svc,
     vacancy_to_response,
+)
+from app.services.vacancies import (
+    update_vacancy as update_vacancy_svc,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,17 +61,17 @@ VACANCY_LIST_CACHE_PREFIX = "vacancy_list"
 
 
 def _list_cache_key(
-    cursor: Optional[str],
+    cursor: str | None,
     page_size: int,
-    lat: Optional[float],
-    lon: Optional[float],
+    lat: float | None,
+    lon: float | None,
     radius_km: float,
-    search: Optional[str],
-    city: Optional[str],
-    category_id: Optional[int],
-    salary_min: Optional[int],
-    salary_max: Optional[int],
-    employment_type: Optional[str],
+    search: str | None,
+    city: str | None,
+    category_id: int | None,
+    salary_min: int | None,
+    salary_max: int | None,
+    employment_type: str | None,
     sort_by: str,
 ) -> str:
     """Deterministic cache key for vacancy list queries."""
@@ -133,20 +135,20 @@ def _vacancy_to_list_item(v: Vacancy) -> VacancyListItem:
     description="Paginated list of vacancies with optional geo-filter, text search, and filters. Uses keyset pagination (cursor-based). Cached for 30 seconds.",
 )
 async def list_vacancies(
-    cursor: Optional[str] = Query(
+    cursor: str | None = Query(
         None,
         description="Opaque cursor token from a previous response (next_cursor / prev_cursor)",
     ),
     page_size: int = Query(20, ge=1, le=100),
-    lat: Optional[float] = Query(None, ge=-90, le=90),
-    lon: Optional[float] = Query(None, ge=-180, le=180),
+    lat: float | None = Query(None, ge=-90, le=90),
+    lon: float | None = Query(None, ge=-180, le=180),
     radius_km: float = Query(10.0, gt=0, le=500),
-    search: Optional[str] = None,
-    city: Optional[str] = None,
-    category_id: Optional[int] = None,
-    salary_min: Optional[int] = Query(None, ge=0),
-    salary_max: Optional[int] = Query(None, ge=0),
-    employment_type: Optional[str] = None,
+    search: str | None = None,
+    city: str | None = None,
+    category_id: int | None = None,
+    salary_min: int | None = Query(None, ge=0),
+    salary_max: int | None = Query(None, ge=0),
+    employment_type: str | None = None,
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
@@ -273,8 +275,8 @@ async def list_vacancies(
     items = [_vacancy_to_list_item(v) for v in vacancies]
 
     # ── Build cursor tokens ───────────────────────────────────
-    next_cursor: Optional[str] = None
-    prev_cursor: Optional[str] = None
+    next_cursor: str | None = None
+    prev_cursor: str | None = None
 
     if items:
         # next_cursor → points at the LAST item of this page

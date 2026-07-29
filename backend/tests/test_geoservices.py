@@ -234,7 +234,6 @@ async def test_geocode_redis_cache_hit():
 @pytest.mark.asyncio
 async def test_geocode_redis_cache_miss_stores_result():
     """After successful geocode, result is stored in Redis."""
-    import json
     mock_session = _make_mock_session()
 
     mock_redis = _mock_redis_miss()

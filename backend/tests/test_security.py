@@ -11,7 +11,6 @@ from app.config import settings
 from app.services.auth import create_access_token, create_refresh_token, decode_token
 from app.services.security import hash_password, verify_password
 
-
 # ── Password hashing ──────────────────────────────────────────────
 
 class TestPasswordHashing:

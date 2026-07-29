@@ -12,13 +12,15 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.monitoring import setup_metrics
 from app.routers.applications import (
     router as applications_router,
+)
+from app.routers.applications import (
     vacancy_applications_router,
 )
 from app.routers.auth import router as auth_router
 from app.routers.geoservices import router as geo_router
-from app.monitoring import setup_metrics
 from app.routers.health import router as health_router
 from app.routers.vacancies import router as vacancies_router
 
