@@ -96,3 +96,26 @@ async def cache_delete_pattern(pattern: str) -> int:
             "cache_delete_pattern(%s) failed", pattern, exc_info=True,
         )
         return 0
+
+
+# ── Cache metrics (lightweight, no external deps) ─────────────────
+
+_cache_hits = 0
+_cache_misses = 0
+
+
+async def record_cache_hit() -> None:
+    """Increment the cache-hit counter (non-blocking, in-memory)."""
+    global _cache_hits
+    _cache_hits += 1
+
+
+async def record_cache_miss() -> None:
+    """Increment the cache-miss counter (non-blocking, in-memory)."""
+    global _cache_misses
+    _cache_misses += 1
+
+
+async def get_cache_stats() -> dict:
+    """Return current hit/miss counters."""
+    return {"hits": _cache_hits, "misses": _cache_misses}

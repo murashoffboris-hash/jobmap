@@ -17,6 +17,7 @@ from app.routers.applications import (
     vacancy_applications_router,
 )
 from app.routers.auth import router as auth_router
+from app.routers.categories import router as categories_router
 from app.routers.geoservices import router as geo_router
 from app.monitoring import setup_metrics
 from app.routers.health import router as health_router
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(vacancies_router)
     app.include_router(geo_router)
     app.include_router(auth_router)
+    app.include_router(categories_router)
     app.include_router(applications_router)
     app.include_router(vacancy_applications_router)
 
