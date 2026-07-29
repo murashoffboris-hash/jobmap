@@ -17,7 +17,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -67,6 +67,10 @@ def _list_cache_key(
     search: Optional[str],
     city: Optional[str],
     category_id: Optional[int],
+    salary_min: Optional[int],
+    salary_max: Optional[int],
+    employment_type: Optional[str],
+    sort_by: str,
 ) -> str:
     """Deterministic cache key for vacancy list queries."""
     parts = [
@@ -79,6 +83,10 @@ def _list_cache_key(
         search or "_",
         city or "_",
         str(category_id) if category_id is not None else "_",
+        str(salary_min) if salary_min is not None else "_",
+        str(salary_max) if salary_max is not None else "_",
+        employment_type or "_",
+        sort_by,
     ]
     return ":".join(parts)
 
@@ -99,6 +107,7 @@ def _vacancy_to_list_item(v: Vacancy) -> VacancyListItem:
         salary_from=v.salary_from,
         salary_to=v.salary_to,
         salary_currency=v.salary_currency or "BYN",
+        employment_type=v.schedule_type,
         city=v.address_normalized,
         latitude=v.location_lat,
         longitude=v.location_lon,
@@ -121,7 +130,7 @@ def _vacancy_to_list_item(v: Vacancy) -> VacancyListItem:
     "",
     response_model=VacancyListResponse,
     summary="List vacancies",
-    description="Paginated list of vacancies with optional geo-filter, text search, and category filter. Uses keyset pagination (cursor-based). Cached for 30 seconds.",
+    description="Paginated list of vacancies with optional geo-filter, text search, and filters. Uses keyset pagination (cursor-based). Cached for 30 seconds.",
 )
 async def list_vacancies(
     cursor: Optional[str] = Query(
@@ -135,6 +144,10 @@ async def list_vacancies(
     search: Optional[str] = None,
     city: Optional[str] = None,
     category_id: Optional[int] = None,
+    salary_min: Optional[int] = Query(None, ge=0),
+    salary_max: Optional[int] = Query(None, ge=0),
+    employment_type: Optional[str] = None,
+    sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
     """List vacancies — keyset pagination, cached for 30 s.
@@ -145,11 +158,20 @@ async def list_vacancies(
     The response always includes ``total`` (best-effort count),
     ``next_cursor`` (non-null when more pages exist), and
     ``prev_cursor`` (non-null when a previous page exists).
+
+    Filter params:
+    - ``search`` — full-text ILIKE on title and description
+    - ``city`` — ILIKE filter on address_normalized
+    - ``salary_min`` / ``salary_max`` — salary range (inclusive)
+    - ``employment_type`` — ``full_time``, ``part_time``, ``gig``
+    - ``category_id`` — category filter
+    - ``sort_by`` — ``created_at`` (default, newest first) or ``salary`` (highest first)
     """
 
     # ── Try cache first ───────────────────────────────────────
     cache_key = _list_cache_key(
-        cursor, page_size, lat, lon, radius_km, search, city, category_id,
+        cursor, page_size, lat, lon, radius_km, search, city,
+        category_id, salary_min, salary_max, employment_type, sort_by,
     )
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -181,12 +203,20 @@ async def list_vacancies(
     elif category_id is not None:
         query = query.where(Vacancy.category_id == category_id)
 
+    # Full-text search on title AND description
     if search:
-        query = query.where(Vacancy.title.ilike(f"%{search}%"))
+        query = query.where(
+            or_(
+                Vacancy.title.ilike(f"%{search}%"),
+                Vacancy.description.ilike(f"%{search}%"),
+            )
+        )
+
+    # City filter
     if city:
         query = query.where(Vacancy.address_normalized.ilike(f"%{city}%"))
 
-    # ── Keyset pagination: WHERE (created_at, id) < (cursor_ts, cursor_id) ──
+    # Keyset pagination: WHERE (created_at, id) < (cursor_ts, cursor_id)
     if cursor_obj is not None:
         query = query.where(
             (Vacancy.created_at < cursor_obj.created_at)
@@ -196,8 +226,36 @@ async def list_vacancies(
             )
         )
 
-    # Sort by newest first (must match the index: created_at DESC, id DESC)
-    query = query.order_by(Vacancy.created_at.desc(), Vacancy.id.desc())
+    # Salary range
+    if salary_min is not None:
+        query = query.where(Vacancy.salary_to >= salary_min)
+    if salary_max is not None:
+        query = query.where(Vacancy.salary_from <= salary_max)
+
+    # Employment type — map query param to schedule_type values
+    if employment_type:
+        emp_type_map = {
+            "full_time": "full-time",
+            "part_time": "part-time",
+            "gig": "one-time",
+        }
+        db_value = emp_type_map.get(employment_type)
+        if db_value:
+            query = query.where(Vacancy.schedule_type == db_value)
+        else:
+            query = query.where(Vacancy.schedule_type == employment_type)
+
+    # Sort — for keyset pagination, sort order must match Cursor invariant
+    # (created_at DESC, id DESC). When sorting by salary, the cursor invariant
+    # still holds because we append (created_at DESC, id DESC) after the salary sort.
+    if sort_by == "salary":
+        query = query.order_by(
+            Vacancy.salary_from.desc().nullslast(),
+            Vacancy.created_at.desc(),
+            Vacancy.id.desc(),
+        )
+    else:
+        query = query.order_by(Vacancy.created_at.desc(), Vacancy.id.desc())
 
     # Count total (best-effort: full scan is expensive; use estimate or live with it)
     count_q = select(func.count()).select_from(query.subquery())
