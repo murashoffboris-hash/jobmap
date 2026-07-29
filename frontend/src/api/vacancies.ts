@@ -19,7 +19,10 @@ export interface VacancyListParams {
   page_size?: number;
   city?: string;
   employment_type?: string;
+  schedule_type?: string;
   search?: string;
+  salary_from?: number;
+  salary_to?: number;
   bbox?: [number, number, number, number]; // [west, south, east, north]
 }
 
