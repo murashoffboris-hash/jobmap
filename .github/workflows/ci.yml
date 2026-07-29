@@ -27,13 +27,16 @@ jobs:
       - name: Install dependencies
         run: |
           cd backend
+          pip install --upgrade pip
           pip install -r requirements.txt
+          pip list 2>&1 | grep -iE "pytest|asyncpg|fastapi|sqlalchemy|prometheus"
       - name: Run tests
         env:
           DATABASE_URL: postgresql+asyncpg://job_service:test@localhost:5432/job_service_test
         run: |
           cd backend
-          pytest --tb=short
+          python -m pytest --collect-only -q 2>&1 | tail -20
+          python -m pytest --tb=short -v 2>&1
 
   test-frontend:
     runs-on: ubuntu-latest
