@@ -195,7 +195,7 @@ class TestCombinedParamsValidation:
 
 
 class TestBackwardCompatibility:
-    """No-param and pagination tests."""
+    """No-param and pagination tests — updated for keyset pagination."""
 
     @pytest.mark.asyncio
     async def test_no_params_backward_compat(self, client):
@@ -204,20 +204,23 @@ class TestBackwardCompatibility:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 0
-        assert data["page"] == 1
         assert data["page_size"] == 20
+        # Keyset pagination — no 'page' field, only cursor tokens
+        assert "next_cursor" in data
+        assert "prev_cursor" in data
 
     @pytest.mark.asyncio
     async def test_pagination_with_filters(self, client):
-        """Pagination works with filters applied."""
+        """Pagination works with filters applied (keyset cursor)."""
         resp = await client.get(
             "/api/vacancies",
-            params={"page": 2, "page_size": 5, "city": "Минск"},
+            params={"page_size": 5, "city": "Минск"},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["page"] == 2
         assert data["page_size"] == 5
+        # Keyset pagination — no 'page' field
+        assert "next_cursor" in data
 
     @pytest.mark.asyncio
     async def test_empty_result_on_no_match(self, client):
@@ -243,37 +246,37 @@ class TestCacheKeyDeterminism:
     def test_cache_key_includes_salary_min(self):
         from app.routers.vacancies import _list_cache_key
 
-        k1 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, 500, None, None, "created_at")
-        k2 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, 1000, None, None, "created_at")
+        k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, 500, None, None, "created_at")
+        k2 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, 1000, None, None, "created_at")
         assert k1 != k2
 
     def test_cache_key_includes_salary_max(self):
         from app.routers.vacancies import _list_cache_key
 
-        k1 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
-        k2 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, 5000, None, "created_at")
+        k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+        k2 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, 5000, None, "created_at")
         assert k1 != k2
 
     def test_cache_key_includes_employment_type(self):
         from app.routers.vacancies import _list_cache_key
 
-        k1 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
-        k2 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, "full_time", "created_at")
+        k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+        k2 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, "full_time", "created_at")
         assert k1 != k2
 
     def test_cache_key_includes_sort_by(self):
         from app.routers.vacancies import _list_cache_key
 
-        k1 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
-        k2 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "salary")
+        k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+        k2 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "salary")
         assert k1 != k2
 
     def test_cache_key_backward_compat_no_new_params(self):
         """Without new params, key is deterministic and stable."""
         from app.routers.vacancies import _list_cache_key
 
-        key = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
-        expected = "vacancy_list:1:20:_:_:10.0:_:_:_:_:_:_:created_at"
+        key = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+        expected = "vacancy_list:_:20:_:_:10.0:_:_:_:_:_:_:created_at"
         assert key == expected
 
 

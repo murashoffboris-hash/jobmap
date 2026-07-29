@@ -96,3 +96,42 @@ async def cache_delete_pattern(pattern: str) -> int:
             "cache_delete_pattern(%s) failed", pattern, exc_info=True,
         )
         return 0
+
+
+# ── Cache statistics (hit / miss tracking) ────────────────────────
+
+CACHE_STATS_HITS = "cache:stats:hits"
+CACHE_STATS_MISSES = "cache:stats:misses"
+
+
+async def record_cache_hit() -> None:
+    """Increment the global cache-hit counter in Redis (best-effort)."""
+    try:
+        r = await get_redis()
+        await r.incr(CACHE_STATS_HITS)
+    except Exception:
+        logger.debug("record_cache_hit failed", exc_info=True)
+
+
+async def record_cache_miss() -> None:
+    """Increment the global cache-miss counter in Redis (best-effort)."""
+    try:
+        r = await get_redis()
+        await r.incr(CACHE_STATS_MISSES)
+    except Exception:
+        logger.debug("record_cache_miss failed", exc_info=True)
+
+
+async def get_cache_stats() -> dict[str, int]:
+    """Return current hit / miss counters from Redis."""
+    try:
+        r = await get_redis()
+        hits = await r.get(CACHE_STATS_HITS)
+        misses = await r.get(CACHE_STATS_MISSES)
+        return {
+            "hits": int(hits) if hits else 0,
+            "misses": int(misses) if misses else 0,
+        }
+    except Exception:
+        logger.warning("get_cache_stats failed", exc_info=True)
+        return {"hits": 0, "misses": 0}

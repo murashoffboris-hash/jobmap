@@ -42,23 +42,23 @@ def _make_async_iter(items: list[str]):
 
 
 class TestCacheKey:
-    """Deterministic cache key generation."""
+    """Deterministic cache key generation — updated for keyset pagination."""
 
     def test_basic_key(self):
-        key = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
-        assert key == "vacancy_list:1:20:_:_:10.0:_:_:_:_:_:_:created_at"
+        key = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+        assert key == "vacancy_list:_:20:_:_:10.0:_:_:_:_:_:_:created_at"
 
     def test_with_coords(self):
-        key = _list_cache_key(1, 20, 53.9, 27.5667, 10.0, None, None, None, None, None, None, "created_at")
-        assert key == "vacancy_list:1:20:53.9000:27.5667:10.0:_:_:_:_:_:_:created_at"
+        key = _list_cache_key(None, 20, 53.9, 27.5667, 10.0, None, None, None, None, None, None, "created_at")
+        assert key == "vacancy_list:_:20:53.9000:27.5667:10.0:_:_:_:_:_:_:created_at"
 
     def test_with_search(self):
-        key = _list_cache_key(2, 50, None, None, 10.0, "driver", "Minsk", 5, None, None, None, "created_at")
-        assert key == "vacancy_list:2:50:_:_:10.0:driver:Minsk:5:_:_:_:created_at"
+        key = _list_cache_key(None, 50, None, None, 10.0, "driver", "Minsk", 5, None, None, None, "created_at")
+        assert key == "vacancy_list:_:50:_:_:10.0:driver:Minsk:5:_:_:_:created_at"
 
-    def test_different_pages_different_keys(self):
-        k1 = _list_cache_key(1, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
-        k2 = _list_cache_key(2, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+    def test_different_cursors_different_keys(self):
+        k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
+        k2 = _list_cache_key("***==", 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
         assert k1 != k2
 
 
