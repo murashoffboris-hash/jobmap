@@ -259,3 +259,15 @@ class CacheStatsResponse(BaseModel):
     """Hit/miss counters for the vacancy list cache."""
     hits: int
     misses: int
+
+
+# ── Categories ──
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+    icon: str | None = None
+    is_active: bool = True
+
+    model_config = {"from_attributes": True}

@@ -1,0 +1,15 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,GET /health,HTTPError('504 Server Error: Gateway Time-out for url: GET /health'),3,2026-07-27T20:35:11Z,2026-07-27T20:35:15Z
+GET,GET /api/vacancies/{id},HTTPError('404 Client Error: Not Found for url: GET /api/vacancies/{id}'),1,2026-07-27T20:36:21Z,2026-07-27T20:36:21Z
+POST,POST /api/auth/register,CatchResponseError('Register: 500'),467,2026-07-27T20:34:11Z,2026-07-27T20:34:45Z
+POST,POST /api/auth/login,HTTPError('503 Server Error: Service Temporarily Unavailable for url: POST /api/auth/login'),517,2026-07-27T20:33:41Z,2026-07-27T20:34:42Z
+GET,GET /api/applications,HTTPError('401 Client Error: Unauthorized for url: GET /api/applications'),629,2026-07-27T20:33:43Z,2026-07-27T20:36:33Z
+GET,GET /api/vacancies/{id},CatchResponseError('HTTP 504'),23,2026-07-27T20:34:45Z,2026-07-27T20:36:16Z
+POST,POST /api/auth/register,CatchResponseError('Register: 504'),18,2026-07-27T20:34:41Z,2026-07-27T20:35:11Z
+GET,GET /api/vacancies (list),CatchResponseError('HTTP 500'),2285,2026-07-27T20:34:11Z,2026-07-27T20:36:34Z
+POST,POST /api/auth/login,HTTPError('429 Client Error: Too Many Requests for url: POST /api/auth/login'),432,2026-07-27T20:33:49Z,2026-07-27T20:35:11Z
+GET,GET /api/vacancies (list),CatchResponseError('HTTP 504'),49,2026-07-27T20:34:44Z,2026-07-27T20:36:15Z
+POST,POST /api/auth/register,CatchResponseError('Register: 503'),515,2026-07-27T20:33:41Z,2026-07-27T20:34:14Z
+POST,POST /api/auth/login,HTTPError('500 Server Error: Internal Server Error for url: POST /api/auth/login'),20,2026-07-27T20:34:11Z,2026-07-27T20:35:24Z
+POST,POST /api/auth/login,HTTPError('502 Server Error: Bad Gateway for url: POST /api/auth/login'),31,2026-07-27T20:34:11Z,2026-07-27T20:34:42Z
+GET,GET /api/vacancies/{id},CatchResponseError('HTTP 500'),966,2026-07-27T20:34:11Z,2026-07-27T20:36:34Z
