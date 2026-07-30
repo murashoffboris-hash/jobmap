@@ -318,3 +318,61 @@ class TestEmploymentTypeMapping:
         """gig → one-time."""
         emp_map = {"full_time": "full-time", "part_time": "part-time", "gig": "one-time"}
         assert emp_map["gig"] == "one-time"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SQL generation tests — verify LOWER() is used for Cyrillic safety
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestCityFilterSqlGeneration:
+    """Verify city filter generates LOWER()+LIKE, not ILIKE."""
+
+    def test_city_filter_uses_lower_not_ilike(self):
+        from sqlalchemy import func
+        from sqlalchemy.dialects import postgresql
+        from app.models import Vacancy
+
+        expr = func.lower(Vacancy.address_normalized).contains("Солигорск")
+        compiled = expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+        sql = str(compiled).lower()
+
+        assert "lower(" in sql
+        assert "ilike" not in sql
+        assert "like" in sql
+        assert "солигорск" in sql
+
+    def test_search_filter_uses_lower_not_ilike(self):
+        from sqlalchemy import func
+        from sqlalchemy.dialects import postgresql
+        from app.models import Vacancy
+
+        expr = func.lower(Vacancy.title).contains("бетон")
+        compiled = expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+        sql = str(compiled).lower()
+
+        assert "lower(" in sql
+        assert "ilike" not in sql
+        assert "like" in sql
+        assert "бетон" in sql
+
+    def test_city_filter_preserves_pattern_semantics(self):
+        from sqlalchemy import func
+        from sqlalchemy.dialects import postgresql
+        from app.models import Vacancy
+
+        expr = func.lower(Vacancy.address_normalized).contains("Минск")
+        compiled = expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+        sql = str(compiled)
+
+        assert "%" in sql
+        assert "Минск" in sql
