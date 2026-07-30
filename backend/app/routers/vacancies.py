@@ -69,8 +69,8 @@ def _list_cache_key(
     search: str | None,
     city: str | None,
     category_id: int | None,
-    salary_min: int | None,
-    salary_max: int | None,
+    salary_from: int | None,
+    salary_to: int | None,
     employment_type: str | None,
     sort_by: str,
 ) -> str:
@@ -85,8 +85,8 @@ def _list_cache_key(
         search or "_",
         city or "_",
         str(category_id) if category_id is not None else "_",
-        str(salary_min) if salary_min is not None else "_",
-        str(salary_max) if salary_max is not None else "_",
+        str(salary_from) if salary_from is not None else "_",
+        str(salary_to) if salary_to is not None else "_",
         employment_type or "_",
         sort_by,
     ]
@@ -146,10 +146,9 @@ async def list_vacancies(
     search: str | None = None,
     city: str | None = None,
     category_id: int | None = None,
-    salary_min: int | None = Query(None, ge=0),
-    salary_max: int | None = Query(None, ge=0),
-    employment_type: str | None = Query(None, description="Тип занятости: full_time, part_time, gig"),
-    schedule_type: str | None = Query(None, alias="schedule_type", deprecated=True, description="Deprecated — use employment_type instead"),
+    salary_from: int | None = Query(None, ge=0),
+    salary_to: int | None = Query(None, ge=0),
+    employment_type: str | None = Query(None, alias="schedule_type"),
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
@@ -167,9 +166,8 @@ async def list_vacancies(
     Filter params:
     - ``search`` — full-text ILIKE on title and description
     - ``city`` — ILIKE filter on address_normalized
-    - ``salary_min`` / ``salary_max`` — salary range (inclusive)
-    - ``employment_type`` — ``full_time``, ``part_time``, ``gig``
-    - ``schedule_type`` (deprecated alias) — use ``employment_type`` instead
+    - ``salary_from`` / ``salary_to`` — salary range (inclusive)
+    - ``employment_type`` (also accepts ``schedule_type`` alias) — ``full_time``, ``part_time``, ``gig``
     - ``category_id`` — category filter
     - ``sort_by`` — ``created_at`` (default, newest first) or ``salary`` (highest first)
     """
@@ -177,7 +175,7 @@ async def list_vacancies(
     # ── Try cache first ───────────────────────────────────────
     cache_key = _list_cache_key(
         cursor, page_size, lat, lon, radius_km, search, city,
-        category_id, salary_min, salary_max, _employment_type, sort_by,
+        category_id, salary_from, salary_to, employment_type, sort_by,
     )
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -233,10 +231,10 @@ async def list_vacancies(
         )
 
     # Salary range
-    if salary_min is not None:
-        query = query.where(Vacancy.salary_to >= salary_min)
-    if salary_max is not None:
-        query = query.where(Vacancy.salary_from <= salary_max)
+    if salary_from is not None:
+        query = query.where(Vacancy.salary_to >= salary_from)
+    if salary_to is not None:
+        query = query.where(Vacancy.salary_from <= salary_to)
 
     # Employment type — map query param to schedule_type values
     if _employment_type:
