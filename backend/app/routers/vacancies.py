@@ -146,12 +146,17 @@ async def list_vacancies(
     search: str | None = None,
     city: str | None = None,
     category_id: int | None = None,
-    salary_from: int | None = Query(None, ge=0),
-    salary_to: int | None = Query(None, ge=0),
+    salary_from: int | None = Query(None, ge=0, description="Minimum salary filter (lower bound, inclusive)"),
+    salary_to: int | None = Query(None, ge=0, description="Maximum salary filter (upper bound, inclusive)"),
+    salary_min: int | None = Query(None, ge=0, alias="salary_min", deprecated=True, description="Deprecated — use salary_from instead"),
+    salary_max: int | None = Query(None, ge=0, alias="salary_max", deprecated=True, description="Deprecated — use salary_to instead"),
     employment_type: str | None = Query(None, alias="schedule_type"),
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
+    # ── Merge backward-compatible salary_min/max aliases ────────
+    _salary_from = salary_from if salary_from is not None else salary_min
+    _salary_to = salary_to if salary_to is not None else salary_max
     """List vacancies — keyset pagination, cached for 30 s.
 
     First page: omit ``cursor``. Subsequent pages: pass ``next_cursor``
@@ -162,9 +167,10 @@ async def list_vacancies(
     ``prev_cursor`` (non-null when a previous page exists).
 
     Filter params:
-    - ``search`` — full-text ILIKE on title and description
-    - ``city`` — ILIKE filter on address_normalized
-    - ``salary_from`` / ``salary_to`` — salary range (inclusive)
+    - ``search`` — full-text search on title and description (case-insensitive, Unicode-safe)
+    - ``city`` — case-insensitive filter on address_normalized (Unicode-safe)
+    - ``salary_from`` / ``salary_min`` (deprecated alias) — minimum salary (inclusive)
+    - ``salary_to`` / ``salary_max`` (deprecated alias) — maximum salary (inclusive)
     - ``employment_type`` (also accepts ``schedule_type`` alias) — ``full_time``, ``part_time``, ``gig``
     - ``category_id`` — category filter
     - ``sort_by`` — ``created_at`` (default, newest first) or ``salary`` (highest first)
@@ -173,7 +179,7 @@ async def list_vacancies(
     # ── Try cache first ───────────────────────────────────────
     cache_key = _list_cache_key(
         cursor, page_size, lat, lon, radius_km, search, city,
-        category_id, salary_from, salary_to, employment_type, sort_by,
+        category_id, _salary_from, _salary_to, employment_type, sort_by,
     )
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -206,17 +212,20 @@ async def list_vacancies(
         query = query.where(Vacancy.category_id == category_id)
 
     # Full-text search on title AND description
+    # Uses explicit LOWER()+LIKE instead of ILIKE for robust
+    # Cyrillic / Unicode matching regardless of LC_CTYPE collation.
     if search:
         query = query.where(
             or_(
-                Vacancy.title.ilike(f"%{search}%"),
-                Vacancy.description.ilike(f"%{search}%"),
+                func.lower(Vacancy.title).contains(search.lower()),
+                func.lower(Vacancy.description).contains(search.lower()),
             )
         )
 
-    # City filter
+    # City filter — explicit LOWER()+LIKE for robust Cyrillic matching
+    # (ILIKE depends on LC_CTYPE; LOWER() handles Unicode in all collations).
     if city:
-        query = query.where(Vacancy.address_normalized.ilike(f"%{city}%"))
+        query = query.where(func.lower(Vacancy.address_normalized).contains(city.lower()))
 
     # Keyset pagination: WHERE (created_at, id) < (cursor_ts, cursor_id)
     if cursor_obj is not None:
@@ -229,10 +238,10 @@ async def list_vacancies(
         )
 
     # Salary range
-    if salary_from is not None:
-        query = query.where(Vacancy.salary_to >= salary_from)
-    if salary_to is not None:
-        query = query.where(Vacancy.salary_from <= salary_to)
+    if _salary_from is not None:
+        query = query.where(Vacancy.salary_to >= _salary_from)
+    if _salary_to is not None:
+        query = query.where(Vacancy.salary_from <= _salary_to)
 
     # Employment type — map query param to schedule_type values
     if employment_type:
