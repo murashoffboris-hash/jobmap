@@ -150,7 +150,8 @@ async def list_vacancies(
     salary_to: int | None = Query(None, ge=0, description="Maximum salary filter (upper bound, inclusive)"),
     salary_min: int | None = Query(None, ge=0, alias="salary_min", deprecated=True, description="Deprecated — use salary_from instead"),
     salary_max: int | None = Query(None, ge=0, alias="salary_max", deprecated=True, description="Deprecated — use salary_to instead"),
-    employment_type: str | None = Query(None, alias="schedule_type"),
+    employment_type: str | None = Query(None),
+    schedule_type: str | None = Query(None, deprecated=True, description="Deprecated — use employment_type instead"),
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
