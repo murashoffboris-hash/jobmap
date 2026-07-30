@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,GET /api/vacancies/{id},HTTPError('404 Client Error: Not Found for url: GET /api/vacancies/{id}'),13,2026-07-27T20:24:28Z,2026-07-27T20:27:18Z

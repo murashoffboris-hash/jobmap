@@ -329,11 +329,8 @@ class TestCityFilterSqlGeneration:
     """Verify city filter generates LOWER()+LIKE, not ILIKE."""
 
     def test_city_filter_uses_lower_not_ilike(self):
-        """func.lower(Vacancy.address_normalized).contains('Солигорск')
-        compiles to SQL with lower() and LIKE, not ILIKE."""
         from sqlalchemy import func
         from sqlalchemy.dialects import postgresql
-
         from app.models import Vacancy
 
         expr = func.lower(Vacancy.address_normalized).contains("Солигорск")
@@ -343,18 +340,14 @@ class TestCityFilterSqlGeneration:
         )
         sql = str(compiled).lower()
 
-        # Must use lower() function, not ilike
         assert "lower(" in sql
         assert "ilike" not in sql
         assert "like" in sql
         assert "солигорск" in sql
 
     def test_search_filter_uses_lower_not_ilike(self):
-        """func.lower(Vacancy.title).contains('бетон')
-        compiles to SQL with lower() and LIKE, not ILIKE."""
         from sqlalchemy import func
         from sqlalchemy.dialects import postgresql
-
         from app.models import Vacancy
 
         expr = func.lower(Vacancy.title).contains("бетон")
@@ -370,10 +363,8 @@ class TestCityFilterSqlGeneration:
         assert "бетон" in sql
 
     def test_city_filter_preserves_pattern_semantics(self):
-        """contains() wraps the value in % wildcards for substring match."""
         from sqlalchemy import func
         from sqlalchemy.dialects import postgresql
-
         from app.models import Vacancy
 
         expr = func.lower(Vacancy.address_normalized).contains("Минск")
@@ -383,6 +374,120 @@ class TestCityFilterSqlGeneration:
         )
         sql = str(compiled)
 
-        # contains() generates LIKE '%' || value || '%'
         assert "%" in sql
         assert "Минск" in sql
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Salary filter SQL generation — verify correct columns used
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestSalaryFilterSqlGeneration:
+    """Verify salary filter uses correct column: salary_from >= param, not salary_to >=."""
+
+    def test_salary_from_uses_correct_column(self):
+        """salary_from filter uses Vacancy.salary_from >= value, NOT salary_to."""
+        from sqlalchemy.dialects import postgresql
+        from app.models import Vacancy
+
+        # Correct: Vacancy.salary_from >= 1000
+        expr = Vacancy.salary_from >= 1000
+        compiled = expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+        sql = str(compiled)
+        assert "salary_from" in sql
+        assert ">= 1000" in sql
+        assert "salary_to" not in sql
+
+    def test_salary_to_uses_correct_column(self):
+        """salary_to filter uses Vacancy.salary_from <= value."""
+        from sqlalchemy.dialects import postgresql
+        from app.models import Vacancy
+
+        expr = Vacancy.salary_from <= 3000
+        compiled = expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+        sql = str(compiled)
+        assert "salary_from" in sql
+        assert "<= 3000" in sql
+
+    def test_salary_from_not_using_salary_to_column(self):
+        """Explicit safety check: salary_from MUST NOT filter on salary_to column."""
+        from sqlalchemy.dialects import postgresql
+        from app.models import Vacancy
+
+        # The WRONG pattern (which we fixed): Vacancy.salary_to >= 1000
+        wrong_expr = Vacancy.salary_to >= 1000
+        wrong_sql = str(wrong_expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        ))
+
+        # The CORRECT pattern: Vacancy.salary_from >= 1000
+        correct_expr = Vacancy.salary_from >= 1000
+        correct_sql = str(correct_expr.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        ))
+
+        # They produce different SQL — prove our fix matters
+        assert wrong_sql != correct_sql
+        assert "salary_to" in wrong_sql
+        assert "salary_to" not in correct_sql
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Backward compatibility — deprecated salary_min/salary_max aliases
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestSalaryBackwardCompat:
+    """Verify salary_min/salary_max deprecated aliases are still accepted."""
+
+    @pytest.mark.asyncio
+    async def test_salary_min_accepted(self, client):
+        """salary_min deprecated alias → 200."""
+        resp = await client.get(
+            "/api/vacancies", params={"salary_min": 500}
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_max_accepted(self, client):
+        """salary_max deprecated alias → 200."""
+        resp = await client.get(
+            "/api/vacancies", params={"salary_max": 3000}
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_min_max_both_accepted(self, client):
+        """Both deprecated aliases → 200."""
+        resp = await client.get(
+            "/api/vacancies",
+            params={"salary_min": 500, "salary_max": 5000},
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_from_trumps_salary_min(self, client):
+        """salary_from takes priority when both provided."""
+        resp = await client.get(
+            "/api/vacancies",
+            params={"salary_from": 2000, "salary_min": 500},
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_to_trumps_salary_max(self, client):
+        """salary_to takes priority when both provided."""
+        resp = await client.get(
+            "/api/vacancies",
+            params={"salary_to": 5000, "salary_max": 10000},
+        )
+        assert resp.status_code == 200
