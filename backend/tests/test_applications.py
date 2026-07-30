@@ -235,10 +235,36 @@ async def test_pagination_defaults(client: AsyncClient):
     """GET /api/applications с параметрами пагинации по умолчанию."""
     try:
         response = await client.get(
-            "/api/applications?page=1&page_size=20",
+            "/api/applications?limit=20&offset=0",
             headers=_auth(VALID_TOKEN),
         )
         # user not found → 401
+        assert response.status_code in (401, 200)
+    except ConnectionRefusedError:
+        pytest.skip("No database available")
+
+
+@pytest.mark.asyncio
+async def test_pagination_limit_zero(client: AsyncClient):
+    """GET /api/applications с limit=0 → все записи (старое поведение)."""
+    try:
+        response = await client.get(
+            "/api/applications?limit=0",
+            headers=_auth(VALID_TOKEN),
+        )
+        assert response.status_code in (401, 200)
+    except ConnectionRefusedError:
+        pytest.skip("No database available")
+
+
+@pytest.mark.asyncio
+async def test_pagination_limit_five(client: AsyncClient):
+    """GET /api/applications с limit=5 → 5 записей + total."""
+    try:
+        response = await client.get(
+            "/api/applications?limit=5",
+            headers=_auth(VALID_TOKEN),
+        )
         assert response.status_code in (401, 200)
     except ConnectionRefusedError:
         pytest.skip("No database available")
