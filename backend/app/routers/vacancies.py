@@ -225,8 +225,7 @@ async def list_vacancies(
             )
         )
 
-    # City filter — explicit LOWER()+LIKE for robust Cyrillic matching
-    # (ILIKE depends on LC_CTYPE; LOWER() handles Unicode in all collations).
+    # City filter
     if city:
         query = query.where(func.lower(Vacancy.address_normalized).contains(city.lower()))
 
