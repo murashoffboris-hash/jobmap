@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -345,6 +345,64 @@ async def vacancy_cache_stats():
     Counters are stored in Redis and survive application restarts.
     """
     return await get_cache_stats()
+
+
+@router.get(
+    "/{vacancy_id}/similar",
+    response_model=list[VacancyListItem],
+    summary="Get similar vacancies",
+    description="Return vacancies with the same category or same city, sorted by relevance.",
+)
+async def get_similar_vacancies(
+    vacancy_id: int,
+    limit: int = Query(5, ge=1, le=50, description="Maximum number of similar vacancies to return"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Find similar vacancies — same category_id OR same city.
+
+    Relevance order:
+    1. Same category AND same city (best match)
+    2. Same category only
+    3. Same city only
+
+    The source vacancy itself is always excluded from results.
+    """
+    # Fetch the source vacancy
+    v = await session.get(Vacancy, vacancy_id)
+    if not v:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    # Build query: same category OR same city, excluding self, only active
+    query = (
+        select(Vacancy)
+        .options(selectinload(Vacancy.owner).selectinload(User.profile))
+        .where(Vacancy.status == VacancyStatus.ACTIVE)
+        .where(Vacancy.id != vacancy_id)
+        .where(
+            or_(
+                Vacancy.category_id == v.category_id,
+                Vacancy.address_normalized == v.address_normalized,
+            )
+        )
+        .order_by(
+            case(
+                (
+                    (Vacancy.category_id == v.category_id)
+                    & (Vacancy.address_normalized == v.address_normalized),
+                    0,
+                ),
+                (Vacancy.category_id == v.category_id, 1),
+                else_=2,
+            ),
+            Vacancy.created_at.desc(),
+        )
+        .limit(limit)
+    )
+
+    result = await session.execute(query)
+    vacancies = result.scalars().all()
+
+    return [_vacancy_to_list_item(vac) for vac in vacancies]
 
 
 @router.get(
