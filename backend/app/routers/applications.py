@@ -127,11 +127,11 @@ async def create_application(
     "",
     response_model=ApplicationListResponse,
     summary="List my applications",
-    description="Paginated list of the current user's applications, sorted by newest first.",
+    description="Paginated list of the current user's applications, sorted by newest first. Use limit=0 for all records.",
 )
 async def list_my_applications(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=0, description="Max records (0 = all)"),
+    offset: int = Query(0, ge=0, description="Records to skip"),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -152,13 +152,15 @@ async def list_my_applications(
     count_q = select(func.count()).select_from(base.subquery())
     total = (await session.execute(count_q)).scalar_one()
 
-    # Paginate
-    offset = (page - 1) * page_size
-    result = await session.execute(base.offset(offset).limit(page_size))
+    # Paginate — limit=0 means "return all records, ignore offset"
+    if limit == 0:
+        result = await session.execute(base)
+    else:
+        result = await session.execute(base.offset(offset).limit(limit))
     items = [_application_to_response(a) for a in result.scalars().all()]
 
     return ApplicationListResponse(
-        items=items, total=total, page=page, page_size=page_size
+        items=items, total=total, limit=limit, offset=offset
     )
 
 
@@ -293,12 +295,12 @@ async def update_application_status(
     "/api/vacancies/{vacancy_id}/applications",
     response_model=ApplicationListResponse,
     summary="List vacancy applications",
-    description="Paginated list of applications for a specific vacancy. Only the vacancy owner may view.",
+    description="Paginated list of applications for a specific vacancy. Only the vacancy owner may view. Use limit=0 for all records.",
 )
 async def list_vacancy_applications(
     vacancy_id: int,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=0, description="Max records (0 = all)"),
+    offset: int = Query(0, ge=0, description="Records to skip"),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -325,10 +327,13 @@ async def list_vacancy_applications(
     count_q = select(func.count()).select_from(base.subquery())
     total = (await session.execute(count_q)).scalar_one()
 
-    offset = (page - 1) * page_size
-    result = await session.execute(base.offset(offset).limit(page_size))
+    # Paginate — limit=0 means "return all records, ignore offset"
+    if limit == 0:
+        result = await session.execute(base)
+    else:
+        result = await session.execute(base.offset(offset).limit(limit))
     items = [_application_to_response(a) for a in result.scalars().all()]
 
     return ApplicationListResponse(
-        items=items, total=total, page=page, page_size=page_size
+        items=items, total=total, limit=limit, offset=offset
     )

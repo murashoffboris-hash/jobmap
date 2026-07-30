@@ -228,8 +228,8 @@ class ApplicationResponse(BaseModel):
 class ApplicationListResponse(BaseModel):
     items: list[ApplicationResponse]
     total: int
-    page: int
-    page_size: int
+    limit: int
+    offset: int
 
 class ApplicationStatusUpdate(BaseModel):
     """Request body for PATCH /api/applications/{id}/status."""
