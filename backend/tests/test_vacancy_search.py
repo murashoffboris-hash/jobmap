@@ -94,7 +94,8 @@ class TestSortByValidation:
 
 
 class TestSalaryValidation:
-    """salary_from / salary_to parameter validation."""
+    """salary_from / salary_to parameter validation (salary_min/max as deprecated aliases)."""
+
 
     @pytest.mark.asyncio
     async def test_salary_from_negative_rejected(self, client):
@@ -126,6 +127,27 @@ class TestSalaryValidation:
         resp = await client.get(
             "/api/vacancies",
             params={"salary_from": 500, "salary_to": 3000},
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_min_accepted(self, client):
+        """salary_min=1000 → 200 (deprecated alias for salary_from)."""
+        resp = await client.get("/api/vacancies", params={"salary_min": 1000})
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_max_accepted(self, client):
+        """salary_max=5000 → 200 (deprecated alias for salary_to)."""
+        resp = await client.get("/api/vacancies", params={"salary_max": 5000})
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_salary_min_max_both_accepted(self, client):
+        """salary_min=500&salary_max=3000 → 200 (deprecated aliases)."""
+        resp = await client.get(
+            "/api/vacancies",
+            params={"salary_min": 500, "salary_max": 3000},
         )
         assert resp.status_code == 200
 
