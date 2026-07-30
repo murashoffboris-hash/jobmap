@@ -1,6 +1,6 @@
 """Tests for vacancy search and filtering (task t_cfcc13e1).
 
-Covers all new query parameters: search, city, salary_min, salary_max,
+Covers all new query parameters: search, city, salary_from, salary_to,
 employment_type, category_id, sort_by — plus combinations and edge cases.
 """
 
@@ -94,38 +94,38 @@ class TestSortByValidation:
 
 
 class TestSalaryValidation:
-    """salary_min / salary_max parameter validation."""
+    """salary_from / salary_to parameter validation."""
 
     @pytest.mark.asyncio
-    async def test_salary_min_negative_rejected(self, client):
-        """salary_min=-1 → 422."""
-        resp = await client.get("/api/vacancies", params={"salary_min": -1})
+    async def test_salary_from_negative_rejected(self, client):
+        """salary_from=-1 → 422."""
+        resp = await client.get("/api/vacancies", params={"salary_from": -1})
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_salary_max_negative_rejected(self, client):
-        """salary_max=-1 → 422."""
-        resp = await client.get("/api/vacancies", params={"salary_max": -1})
+    async def test_salary_to_negative_rejected(self, client):
+        """salary_to=-1 → 422."""
+        resp = await client.get("/api/vacancies", params={"salary_to": -1})
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_salary_min_zero_accepted(self, client):
-        """salary_min=0 → 200."""
-        resp = await client.get("/api/vacancies", params={"salary_min": 0})
+    async def test_salary_from_zero_accepted(self, client):
+        """salary_from=0 → 200."""
+        resp = await client.get("/api/vacancies", params={"salary_from": 0})
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_salary_max_zero_accepted(self, client):
-        """salary_max=0 → 200."""
-        resp = await client.get("/api/vacancies", params={"salary_max": 0})
+    async def test_salary_to_zero_accepted(self, client):
+        """salary_to=0 → 200."""
+        resp = await client.get("/api/vacancies", params={"salary_to": 0})
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
     async def test_salary_both_accepted(self, client):
-        """salary_min=500&salary_max=3000 → 200."""
+        """salary_from=500&salary_to=3000 → 200."""
         resp = await client.get(
             "/api/vacancies",
-            params={"salary_min": 500, "salary_max": 3000},
+            params={"salary_from": 500, "salary_to": 3000},
         )
         assert resp.status_code == 200
 
@@ -179,13 +179,13 @@ class TestCombinedParamsValidation:
 
     @pytest.mark.asyncio
     async def test_search_city_salary_combo(self, client):
-        """search+city+salary_min → 200."""
+        """search+city+salary_from → 200."""
         resp = await client.get(
             "/api/vacancies",
             params={
                 "search": "бетон",
                 "city": "Минск",
-                "salary_min": 500,
+                "salary_from": 500,
             },
         )
         assert resp.status_code == 200
@@ -199,8 +199,8 @@ class TestCombinedParamsValidation:
                 "search": "driver",
                 "city": "Minsk",
                 "category_id": 5,
-                "salary_min": 1000,
-                "salary_max": 5000,
+                "salary_from": 1000,
+                "salary_to": 5000,
                 "employment_type": "full_time",
                 "sort_by": "salary",
                 "page": 1,
@@ -259,14 +259,14 @@ class TestBackwardCompatibility:
 class TestCacheKeyDeterminism:
     """_list_cache_key covers all new parameters."""
 
-    def test_cache_key_includes_salary_min(self):
+    def test_cache_key_includes_salary_from(self):
         from app.routers.vacancies import _list_cache_key
 
         k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, 500, None, None, "created_at")
         k2 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, 1000, None, None, "created_at")
         assert k1 != k2
 
-    def test_cache_key_includes_salary_max(self):
+    def test_cache_key_includes_salary_to(self):
         from app.routers.vacancies import _list_cache_key
 
         k1 = _list_cache_key(None, 20, None, None, 10.0, None, None, None, None, None, None, "created_at")
