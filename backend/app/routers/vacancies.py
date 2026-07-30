@@ -148,10 +148,13 @@ async def list_vacancies(
     category_id: int | None = None,
     salary_min: int | None = Query(None, ge=0),
     salary_max: int | None = Query(None, ge=0),
-    employment_type: str | None = None,
+    employment_type: str | None = Query(None, description="Тип занятости: full_time, part_time, gig"),
+    schedule_type: str | None = Query(None, alias="schedule_type", deprecated=True, description="Deprecated — use employment_type instead"),
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
+    # ── Merge backward-compatible schedule_type alias ───────────
+    _employment_type = employment_type if employment_type is not None else schedule_type
     """List vacancies — keyset pagination, cached for 30 s.
 
     First page: omit ``cursor``. Subsequent pages: pass ``next_cursor``
@@ -166,6 +169,7 @@ async def list_vacancies(
     - ``city`` — ILIKE filter on address_normalized
     - ``salary_min`` / ``salary_max`` — salary range (inclusive)
     - ``employment_type`` — ``full_time``, ``part_time``, ``gig``
+    - ``schedule_type`` (deprecated alias) — use ``employment_type`` instead
     - ``category_id`` — category filter
     - ``sort_by`` — ``created_at`` (default, newest first) or ``salary`` (highest first)
     """
@@ -173,7 +177,7 @@ async def list_vacancies(
     # ── Try cache first ───────────────────────────────────────
     cache_key = _list_cache_key(
         cursor, page_size, lat, lon, radius_km, search, city,
-        category_id, salary_min, salary_max, employment_type, sort_by,
+        category_id, salary_min, salary_max, _employment_type, sort_by,
     )
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -235,17 +239,17 @@ async def list_vacancies(
         query = query.where(Vacancy.salary_from <= salary_max)
 
     # Employment type — map query param to schedule_type values
-    if employment_type:
+    if _employment_type:
         emp_type_map = {
             "full_time": "full-time",
             "part_time": "part-time",
             "gig": "one-time",
         }
-        db_value = emp_type_map.get(employment_type)
+        db_value = emp_type_map.get(_employment_type)
         if db_value:
             query = query.where(Vacancy.schedule_type == db_value)
         else:
-            query = query.where(Vacancy.schedule_type == employment_type)
+            query = query.where(Vacancy.schedule_type == _employment_type)
 
     # Sort — for keyset pagination, sort order must match Cursor invariant
     # (created_at DESC, id DESC). When sorting by salary, the cursor invariant
