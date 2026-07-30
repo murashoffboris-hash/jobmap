@@ -73,7 +73,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          source: backend/app/*
+          source: backend/app/**
           target: ${{ env.VPS_PATH }}/backend/app/
           strip_components: 1
           rm: false
