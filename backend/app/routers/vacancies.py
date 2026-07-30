@@ -239,7 +239,7 @@ async def list_vacancies(
 
     # Salary range
     if _salary_from is not None:
-        query = query.where(Vacancy.salary_to >= _salary_from)
+        query = query.where(Vacancy.salary_from >= _salary_from)
     if _salary_to is not None:
         query = query.where(Vacancy.salary_from <= _salary_to)
 
