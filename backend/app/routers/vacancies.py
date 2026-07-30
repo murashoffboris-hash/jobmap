@@ -148,7 +148,7 @@ async def list_vacancies(
     category_id: int | None = None,
     salary_min: int | None = Query(None, ge=0),
     salary_max: int | None = Query(None, ge=0),
-    employment_type: str | None = None,
+    employment_type: str | None = Query(None, alias="schedule_type"),
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
 ):
@@ -165,7 +165,7 @@ async def list_vacancies(
     - ``search`` — full-text ILIKE on title and description
     - ``city`` — ILIKE filter on address_normalized
     - ``salary_min`` / ``salary_max`` — salary range (inclusive)
-    - ``employment_type`` — ``full_time``, ``part_time``, ``gig``
+    - ``employment_type`` (also accepts ``schedule_type`` alias) — ``full_time``, ``part_time``, ``gig``
     - ``category_id`` — category filter
     - ``sort_by`` — ``created_at`` (default, newest first) or ``salary`` (highest first)
     """

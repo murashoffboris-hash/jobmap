@@ -157,6 +157,22 @@ class TestEmploymentTypeValidation:
         )
         assert resp.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_schedule_type_alias(self, client):
+        """schedule_type alias accepted → 200 (same as employment_type)."""
+        resp = await client.get(
+            "/api/vacancies", params={"schedule_type": "full_time"}
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_schedule_type_5_2_value(self, client):
+        """schedule_type=5/2 → 200 — acceptance criteria from t_e9d292b3."""
+        resp = await client.get(
+            "/api/vacancies", params={"schedule_type": "5/2"}
+        )
+        assert resp.status_code == 200
+
 
 class TestCombinedParamsValidation:
     """Multiple filter params combined — all pass validation."""
