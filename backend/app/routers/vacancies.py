@@ -150,7 +150,7 @@ async def list_vacancies(
     salary_to: int | None = Query(None, ge=0, description="Maximum salary filter (upper bound, inclusive)"),
     salary_min: int | None = Query(None, ge=0, alias="salary_min", deprecated=True, description="Deprecated — use salary_from instead"),
     salary_max: int | None = Query(None, ge=0, alias="salary_max", deprecated=True, description="Deprecated — use salary_to instead"),
-    employment_type: str | None = Query(None),
+    employment_type: str | None = Query(None, description="Тип занятости: full_time, part_time, gig"),
     schedule_type: str | None = Query(None, deprecated=True, description="Deprecated — use employment_type instead"),
     sort_by: str = Query("created_at", pattern="^(created_at|salary)$"),
     session: AsyncSession = Depends(get_session),
@@ -159,7 +159,7 @@ async def list_vacancies(
     _salary_from = salary_from if salary_from is not None else salary_min
     _salary_to = salary_to if salary_to is not None else salary_max
     # ── Merge backward-compatible schedule_type alias ───────────
-    _employment_type = employment_type or schedule_type
+    _employment_type = employment_type if employment_type is not None else schedule_type
     """List vacancies — keyset pagination, cached for 30 s.
 
     First page: omit ``cursor``. Subsequent pages: pass ``next_cursor``
@@ -174,7 +174,8 @@ async def list_vacancies(
     - ``city`` — case-insensitive filter on address_normalized (Unicode-safe)
     - ``salary_from`` / ``salary_min`` (deprecated alias) — minimum salary (inclusive)
     - ``salary_to`` / ``salary_max`` (deprecated alias) — maximum salary (inclusive)
-    - ``employment_type`` (also accepts ``schedule_type`` alias) — ``full_time``, ``part_time``, ``gig``
+    - ``employment_type`` — ``full_time``, ``part_time``, ``gig``
+    - ``schedule_type`` (deprecated) — alias for ``employment_type``
     - ``category_id`` — category filter
     - ``sort_by`` — ``created_at`` (default, newest first) or ``salary`` (highest first)
     """
